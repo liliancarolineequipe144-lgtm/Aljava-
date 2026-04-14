@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "convitebrancadeneve@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidString(val, min, max) {
+      return val is string && val.size() >= min && val.size() <= max;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidChild(data) {
+      return data.keys().hasAll(['name', 'birthDate']) &&
+             isValidString(data.name, 1, 200) &&
+             isValidString(data.birthDate, 1, 20) &&
+             (!('status' in data) || data.status in ['Ativa', 'Inativa', 'Visitante']) &&
+             (!('parentId' in data) || isValidString(data.parentId, 1, 100)) &&
+             (!('parentIds' in data) || data.parentIds is list) &&
+             (!('familyId' in data) || isValidString(data.familyId, 1, 100)) &&
+             (!('familyName' in data) || isValidString(data.familyName, 0, 200)) &&
+             (!('photoUrl' in data) || isValidString(data.photoUrl, 0, 2000));
+    }
+
+    function isValidParent(data) {
+      return data.keys().hasAll(['name', 'phone', 'leader']) &&
+             isValidString(data.name, 1, 200) &&
+             isValidString(data.phone, 5, 30) &&
+             isValidString(data.leader, 1, 200) &&
+             (!('familyId' in data) || isValidString(data.familyId, 1, 100)) &&
+             (!('relation' in data) || isValidString(data.relation, 1, 50));
+    }
+
+    function isValidMaterial(data) {
+      return data.keys().hasAll(['name', 'quantity', 'category']) &&
+             isValidString(data.name, 2, 100) &&
+             data.quantity is number &&
+             data.quantity >= 0 &&
+             data.category is string &&
+             (!('minQuantity' in data) || data.minQuantity is number) &&
+             (!('lastUpdated' in data) || data.lastUpdated is string);
+    }
+
+    function isValidVolunteer(data) {
+      return data.keys().hasAll(['name', 'phone', 'role']) &&
+             isValidString(data.name, 1, 200) &&
+             isValidString(data.phone, 5, 30) &&
+             isValidString(data.role, 1, 100) &&
+             (!('active' in data) || data.active is bool) &&
+             (!('birthDate' in data) || data.birthDate == "" || isValidString(data.birthDate, 1, 20));
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasAll(['date', 'volunteerId', 'groupId', 'shift']) &&
+             isValidString(data.date, 10, 10) &&
+             isValidString(data.volunteerId, 1, 100) &&
+             isValidString(data.groupId, 2, 2) &&
+             isValidString(data.shift, 1, 20);
+    }
+
+    function isValidService(data) {
+      return data.keys().hasAll(['name', 'date', 'type']) &&
+             isValidString(data.name, 1, 200) &&
+             isValidString(data.date, 8, 20) &&
+             isValidString(data.type, 1, 50) &&
+             (!('theme' in data) || isValidString(data.theme, 0, 500)) &&
+             (!('description' in data) || isValidString(data.description, 0, 1000)) &&
+             (!('studyContent' in data) || isValidString(data.studyContent, 0, 10000)) &&
+             (!('aiSuggestions' in data) || isValidString(data.aiSuggestions, 0, 5000)) &&
+             (!('fileUrl' in data) || isValidString(data.fileUrl, 0, 2000)) &&
+             (!('fileName' in data) || isValidString(data.fileName, 0, 500));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /test/connection {
+      allow read: if isAuthenticated();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId && request.resource.data.role == 'user';
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == userId && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /children/{childId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidChild(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /parents/{parentId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidParent(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /materials/{materialId} {
+      allow get, list: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidMaterial(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /volunteers/{volunteerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidVolunteer(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidSchedule(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidService(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}

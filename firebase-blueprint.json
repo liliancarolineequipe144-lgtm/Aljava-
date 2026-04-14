@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "child": {
+      "title": "Child",
+      "description": "Represents a child in the ministry",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the child" },
+        "birthDate": { "type": "string", "format": "date", "description": "Birth date" },
+        "allergies": { "type": "string", "description": "Known allergies" },
+        "specialNeeds": { "type": "string", "description": "Special needs or observations" },
+        "parentId": { "type": "string", "description": "Reference to the primary parent/guardian" },
+        "parentIds": { "type": "array", "items": { "type": "string" }, "description": "List of all parent/guardian IDs" },
+        "familyId": { "type": "string", "description": "Family grouping ID" },
+        "familyName": { "type": "string", "description": "Custom name for the family" },
+        "photoUrl": { "type": "string", "description": "Optional photo URL" },
+        "status": { "type": "string", "enum": ["Ativa", "Inativa", "Visitante"], "description": "Current status" }
+      },
+      "required": ["name", "birthDate"]
+    },
+    "parent": {
+      "title": "Parent",
+      "description": "Represents a parent or guardian",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "leader": { "type": "string", "description": "Leader responsible for this parent" },
+        "relation": { "type": "string", "description": "Relation to the child (Father, Mother, etc.)" },
+        "familyId": { "type": "string", "description": "Family grouping ID" }
+      },
+      "required": ["name", "phone", "leader"]
+    },
+    "material": {
+      "title": "Material",
+      "description": "Inventory items for the ministry",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the material" },
+        "quantity": { "type": "number", "description": "Current quantity in stock" },
+        "category": { "type": "string", "description": "Category (e.g., Stationery, Toys, Snacks)" },
+        "minQuantity": { "type": "number", "description": "Minimum quantity before alert" },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["name", "quantity", "category"]
+    },
+    "volunteer": {
+      "title": "Volunteer",
+      "description": "Ministry volunteer",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name" },
+        "phone": { "type": "string", "description": "Contact phone" },
+        "role": { "type": "string", "description": "Role in the ministry" },
+        "active": { "type": "boolean", "description": "Whether the volunteer is active" },
+        "birthDate": { "type": "string", "format": "date", "description": "Birth date" }
+      },
+      "required": ["name", "phone", "role"]
+    },
+    "schedule": {
+      "title": "Schedule",
+      "description": "Volunteer schedule for ministry groups",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date", "description": "Date of the service" },
+        "volunteerId": { "type": "string", "description": "Reference to the volunteer" },
+        "groupId": { "type": "string", "description": "Group ID (G1, G2, G3, G4)" },
+        "shift": { "type": "string", "description": "Shift (Morning/Night)" }
+      },
+      "required": ["date", "volunteerId", "groupId", "shift"]
+    },
+    "service": {
+      "title": "Service",
+      "description": "Church service or network meeting",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the service" },
+        "date": { "type": "string", "format": "date", "description": "Date of the service" },
+        "type": { "type": "string", "description": "Type (Culto, Rede, Evento)" },
+        "description": { "type": "string", "description": "Optional description" },
+        "theme": { "type": "string", "description": "Theme of the service" },
+        "studyContent": { "type": "string", "description": "Content of the study/sermon" },
+        "aiSuggestions": { "type": "string", "description": "AI generated theme suggestions" },
+        "fileUrl": { "type": "string", "description": "URL of the uploaded file" },
+        "fileName": { "type": "string", "description": "Name of the uploaded file" }
+      },
+      "required": ["name", "date", "type"]
+    }
+  },
+  "firestore": {
+    "/children/{childId}": { "schema": "child", "description": "Collection of children" },
+    "/parents/{parentId}": { "schema": "parent", "description": "Collection of parents" },
+    "/materials/{materialId}": { "schema": "material", "description": "Collection of ministry materials" },
+    "/volunteers/{volunteerId}": { "schema": "volunteer", "description": "Collection of volunteers" },
+    "/schedules/{scheduleId}": { "schema": "schedule", "description": "Collection of schedules" },
+    "/services/{serviceId}": { "schema": "service", "description": "Collection of church services" }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Aljava Controle",
+  "description": "Sistema de controle e check-in para ministério infantil, com separação por faixas etárias (G1 a G4) e gestão de materiais.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
