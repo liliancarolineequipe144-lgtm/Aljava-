@@ -97,12 +97,22 @@ service cloud.firestore {
              (!('fileName' in data) || isValidString(data.fileName, 0, 500));
     }
 
+    function isValidSettings(data) {
+      return (!('logoUrl' in data) || isValidString(data.logoUrl, 0, 2000)) &&
+             (!('appName' in data) || isValidString(data.appName, 0, 100));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
     match /test/connection {
       allow read: if isAuthenticated();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true; // Publicly readable for login screen
+      allow write: if isAdmin() && isValidSettings(request.resource.data);
     }
 
     match /users/{userId} {
@@ -146,6 +156,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if isAuthenticated() && isValidService(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true; // Allow public read for logo/app name
+      allow write: if isAdmin();
     }
   }
 }

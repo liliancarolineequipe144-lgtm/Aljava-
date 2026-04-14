@@ -10,6 +10,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc,
+  setDoc,
   doc, 
   query, 
   where, 
@@ -69,7 +70,8 @@ import {
   File as FileIcon,
   QrCode,
   ScanLine,
-  Share2
+  Share2,
+  Settings
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -140,6 +142,12 @@ export default function App() {
   const [editGuardians, setEditGuardians] = useState([{ id: '', name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }]);
   const [familyName, setFamilyName] = useState('');
   const [hasNotifiedToday, setHasNotifiedToday] = useState(false);
+  const [appSettings, setAppSettings] = useState<{ logoUrl: string, appName: string }>({
+    logoUrl: 'https://api.screenshotone.com/take?url=https%3A%2F%2Fstorage.googleapis.com%2Fstatic-assets-public%2Fais%2Fuser_uploads%2F601900293069%2F1744207230495_image.png&viewport_width=1024&viewport_height=768&block_ads=true&block_cookie_banners=true&block_trackers=true&delay=0&format=png',
+    appName: 'Aljava Controle'
+  });
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const isAdmin = !!user;
 
   // Service AI States
   const [serviceAiPrompt, setServiceAiPrompt] = useState('');
@@ -177,7 +185,15 @@ export default function App() {
     }
   };
 
-  const isAdmin = !!user;
+  const updateSettings = async (newSettings: any) => {
+    try {
+      await setDoc(doc(db, 'settings', 'app'), newSettings, { merge: true });
+      toast.success('Configurações atualizadas!');
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      toast.error('Erro ao atualizar configurações.');
+    }
+  };
 
   const filteredChildren = children.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -249,6 +265,20 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'services'));
     return () => unsubscribe();
   }, [user]);
+
+  // Fetch Settings
+  useEffect(() => {
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'app'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setAppSettings({
+          logoUrl: data.logoUrl || 'https://api.screenshotone.com/take?url=https%3A%2F%2Fstorage.googleapis.com%2Fstatic-assets-public%2Fais%2Fuser_uploads%2F601900293069%2F1744207230495_image.png&viewport_width=1024&viewport_height=768&block_ads=true&block_cookie_banners=true&block_trackers=true&delay=0&format=png',
+          appName: data.appName || 'Aljava Controle'
+        });
+      }
+    });
+    return () => unsubSettings();
+  }, []);
 
   async function testConnection() {
     try {
@@ -330,7 +360,7 @@ export default function App() {
     if (!volunteer) return;
 
     const dateStr = format(new Date(schedule.date + 'T12:00:00'), "dd/MM", { locale: ptBR });
-    const message = `Olá ${volunteer.name}! 🏹\n\nVocê está escalado para o Ministério Infantil Aljava:\n\n📅 Data: ${dateStr}\n⏰ Turno: ${schedule.shift}\n🏫 Turma: ${schedule.groupId}\n📖 Tema: ${schedule.studyTheme || 'A definir'}\n\n${schedule.studyIdeas ? `💡 Ideias de Estudo:\n${schedule.studyIdeas}` : ''}\n\nContamos com você! ❤️`;
+    const message = `Olá ${volunteer.name}! 🏹\n\nVocê está escalado para o Ministério Infantil ${appSettings.appName}:\n\n📅 Data: ${dateStr}\n⏰ Turno: ${schedule.shift}\n🏫 Turma: ${schedule.groupId}\n📖 Tema: ${schedule.studyTheme || 'A definir'}\n\n${schedule.studyIdeas ? `💡 Ideias de Estudo:\n${schedule.studyIdeas}` : ''}\n\nContamos com você! ❤️`;
     const encodedMessage = encodeURIComponent(message);
     const phone = volunteer.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
@@ -358,21 +388,21 @@ export default function App() {
   };
 
   const sendBirthdayMessage = (child: Child, parent: Parent) => {
-    const message = `Parabéns 🎉🏹\n\nDesejamos um feliz aniversário para a flecha ${child.name}, amada da nossa Aljava! Que o Papai do Céu derrame bênçãos sem medida sobre sua vida e sua família hoje e sempre.\n\nUm grande abraço de toda a equipe da aljava`;
+    const message = `Parabéns 🎉🏹\n\nDesejamos um feliz aniversário para a flecha ${child.name}, amada da nossa ${appSettings.appName}! Que o Papai do Céu derrame bênçãos sem medida sobre sua vida e sua família hoje e sempre.\n\nUm grande abraço de toda a equipe!`;
     const encodedMessage = encodeURIComponent(message);
     const phone = parent.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
   };
 
   const sendVolunteerBirthdayMessage = (volunteer: Volunteer) => {
-    const message = `Parabéns 🎉🏹\n\nFeliz aniversário, ${volunteer.name}! Agradecemos por todo o seu empenho e dedicação servindo na Aljava. Que o Senhor te abençoe grandemente neste novo ciclo!\n\nUm grande abraço de toda a equipe!`;
+    const message = `Parabéns 🎉🏹\n\nFeliz aniversário, ${volunteer.name}! Agradecemos por todo o seu empenho e dedicação servindo na ${appSettings.appName}. Que o Senhor te abençoe grandemente neste novo ciclo!\n\nUm grande abraço de toda a equipe!`;
     const encodedMessage = encodeURIComponent(message);
     const phone = volunteer.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
   };
 
   const contactVolunteer = (volunteer: Volunteer) => {
-    const message = `Olá ${volunteer.name}, tudo bem? Estou entrando em contato sobre o ministério Aljava.`;
+    const message = `Olá ${volunteer.name}, tudo bem? Estou entrando em contato sobre o ministério ${appSettings.appName}.`;
     const encodedMessage = encodeURIComponent(message);
     const phone = volunteer.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
@@ -386,14 +416,14 @@ export default function App() {
   };
 
   const sendAbsenceMessage = (child: Child, parent: Parent) => {
-    const message = `Olá ${parent.name}, tudo bem? Sentimos falta da flecha ${child.name} nos últimos encontros da Aljava! Esperamos que esteja tudo bem. Estamos ansiosos para vê-los novamente! ❤️🏹`;
+    const message = `Olá ${parent.name}, tudo bem? Sentimos falta da flecha ${child.name} nos últimos encontros da ${appSettings.appName}! Esperamos que esteja tudo bem. Estamos ansiosos para vê-los novamente! ❤️🏹`;
     const encodedMessage = encodeURIComponent(message);
     const phone = parent.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
   };
 
   const sendWelcomeMessage = (child: Child, parent: Parent) => {
-    const message = `Seja bem-vinda, flecha ${child.name}! 🏹✨\n\nFicamos muito felizes com o seu cadastro no Ministério Infantil Aljava. Que sua jornada conosco seja repleta de aprendizado, diversão e do amor de Deus!\n\n${parent.name}, qualquer dúvida estamos à disposição. Nos vemos no próximo encontro! ❤️`;
+    const message = `Seja bem-vinda, flecha ${child.name}! 🏹✨\n\nFicamos muito felizes com o seu cadastro no Ministério Infantil ${appSettings.appName}. Que sua jornada conosco seja repleta de aprendizado, diversão e do amor de Deus!\n\n${parent.name}, qualquer dúvida estamos à disposição. Nos vemos no próximo encontro! ❤️`;
     const encodedMessage = encodeURIComponent(message);
     const phone = parent.phone.replace(/\D/g, '');
     window.open(`https://wa.me/55${phone}?text=${encodedMessage}`, '_blank');
@@ -466,7 +496,7 @@ export default function App() {
         try {
           await navigator.share({
             files: [file],
-            title: 'Cartão de Entrada Aljava',
+            title: `Cartão de Entrada ${appSettings.appName}`,
             text: `Cartão de Entrada - ${child.name}`
           });
           return; // Success on mobile share
@@ -700,7 +730,7 @@ export default function App() {
       const wsMaterials = XLSX.utils.json_to_sheet(materialsData);
       XLSX.utils.book_append_sheet(workbook, wsMaterials, "Estoque");
 
-      XLSX.writeFile(workbook, `Relatorio_Aljava_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+      XLSX.writeFile(workbook, `Relatorio_${appSettings.appName.replace(/\s+/g, '_')}_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
       toast.success('Planilha gerada com sucesso!');
     } catch (error) {
       console.error('Erro ao exportar:', error);
@@ -1303,13 +1333,13 @@ export default function App() {
           <div className="mb-8">
             <div className="w-24 h-24 bg-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <img 
-                src="https://api.screenshotone.com/take?url=https%3A%2F%2Fstorage.googleapis.com%2Fstatic-assets-public%2Fais%2Fuser_uploads%2F601900293069%2F1744207230495_image.png&viewport_width=1024&viewport_height=768&block_ads=true&block_cookie_banners=true&block_trackers=true&delay=0&format=png" 
-                alt="Aljava Logo" 
+                src={appSettings.logoUrl} 
+                alt={`${appSettings.appName} Logo`} 
                 className="w-16 h-16 object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-3 tracking-tight">Aljava Controle</h1>
+            <h1 className="text-4xl font-bold text-slate-900 mb-3 tracking-tight">{appSettings.appName}</h1>
             <p className="text-slate-500 text-lg leading-relaxed">Gestão inteligente para o seu ministério infantil</p>
           </div>
           
@@ -1355,15 +1385,15 @@ export default function App() {
           <div className="p-8 flex items-center gap-4 border-b border-slate-50">
             <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center">
               <img 
-                src="https://api.screenshotone.com/take?url=https%3A%2F%2Fstorage.googleapis.com%2Fstatic-assets-public%2Fais%2Fuser_uploads%2F601900293069%2F1744207230495_image.png&viewport_width=1024&viewport_height=768&block_ads=true&block_cookie_banners=true&block_trackers=true&delay=0&format=png" 
-                alt="Logo" 
+                src={appSettings.logoUrl} 
+                alt={appSettings.appName} 
                 className="w-8 h-8 object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <span className="font-bold text-2xl text-slate-900 block leading-none">Aljava</span>
-              <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">Controle</span>
+              <span className="font-bold text-2xl text-slate-900 block leading-none">{appSettings.appName.split(' ')[0]}</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">{appSettings.appName.split(' ').slice(1).join(' ')}</span>
             </div>
           </div>
 
@@ -1407,6 +1437,10 @@ export default function App() {
                     <Package className="w-5 h-5 mr-3" />
                     Materiais
                   </TabsTrigger>
+                  <TabsTrigger value="settings" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
+                    <Settings className="w-5 h-5 mr-3" />
+                    Configurações
+                  </TabsTrigger>
                 </>
               )}
             </TabsList>
@@ -1438,13 +1472,13 @@ export default function App() {
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary/5 rounded-lg flex items-center justify-center">
               <img 
-                src="https://api.screenshotone.com/take?url=https%3A%2F%2Fstorage.googleapis.com%2Fstatic-assets-public%2Fais%2Fuser_uploads%2F601900293069%2F1744207230495_image.png&viewport_width=1024&viewport_height=768&block_ads=true&block_cookie_banners=true&block_trackers=true&delay=0&format=png" 
-                alt="Logo" 
+                src={appSettings.logoUrl} 
+                alt={appSettings.appName} 
                 className="w-5 h-5 object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
-            <span className="font-bold text-lg text-slate-900">Aljava</span>
+            <span className="font-bold text-lg text-slate-900">{appSettings.appName}</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="rounded-xl">
@@ -1578,6 +1612,14 @@ export default function App() {
                     >
                       <Package className="w-6 h-6 mr-4" />
                       Materiais
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="settings" 
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="w-full justify-start h-14 px-6 rounded-2xl data-[state=active]:bg-primary data-[state=active]:text-white transition-all border-none text-lg font-semibold"
+                    >
+                      <Settings className="w-6 h-6 mr-4" />
+                      Configurações
                     </TabsTrigger>
                   </>
                 )}
@@ -1740,7 +1782,7 @@ export default function App() {
                   <CardHeader className="p-6">
                     <CardTitle className="text-lg font-bold flex items-center gap-2">
                       <Users className="w-5 h-5 text-blue-500" />
-                      Equipe Aljava
+                      Equipe {appSettings.appName}
                     </CardTitle>
                     <CardDescription>Ministros e Auxiliares</CardDescription>
                   </CardHeader>
@@ -1833,7 +1875,7 @@ export default function App() {
                     <Cake className="w-5 h-5" />
                     Aniversariantes do Mês
                   </CardTitle>
-                  <CardDescription className="text-pink-600/70">Celebrando a vida na Aljava</CardDescription>
+                  <CardDescription className="text-pink-600/70">Celebrando a vida na {appSettings.appName}</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <ScrollArea className="h-[350px]">
@@ -2087,7 +2129,7 @@ export default function App() {
                                         <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                                           <QrCode className="w-10 h-10" />
                                         </div>
-                                        <h3 className="text-2xl font-bold">Cartão Aljava</h3>
+                                        <h3 className="text-2xl font-bold">Cartão {appSettings.appName}</h3>
                                         <p className="text-white/70 text-sm">Acesso Seguro</p>
                                       </div>
                                       <div className="p-8 pb-4 flex flex-col items-center gap-6">
@@ -2866,7 +2908,7 @@ export default function App() {
               {/* Lista de Voluntários */}
               <div className="lg:col-span-2 space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-900">Equipe Aljava</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">Equipe {appSettings.appName}</h2>
                   <Badge variant="secondary" className="rounded-full px-4 py-1 bg-primary/5 text-primary border-none font-bold">
                     {volunteers.length} Voluntários
                   </Badge>
@@ -3223,6 +3265,103 @@ export default function App() {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-8">
+            <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
+              <div className="p-8 aljava-gradient text-white">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Settings className="w-6 h-6" />
+                  Configurações do Sistema
+                </h2>
+                <p className="text-white/70 text-sm mt-1">Personalize a aparência e informações do seu ministério</p>
+              </div>
+              <CardContent className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <Label className="text-lg font-bold">Logo do Ministério</Label>
+                    <div className="flex flex-col items-center gap-6 p-8 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+                      <div className="w-32 h-32 bg-white rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border-4 border-white">
+                        <img 
+                          src={appSettings.logoUrl} 
+                          alt="Preview Logo" 
+                          className="w-full h-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="flex flex-col w-full gap-3">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          id="logo-upload"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const url = await handleFileUpload(file, 'settings');
+                                await setDoc(doc(db, 'settings', 'app'), { ...appSettings, logoUrl: url }, { merge: true });
+                                toast.success('Logo atualizada com sucesso!');
+                              } catch (error) {
+                                console.error('Erro ao atualizar logo:', error);
+                              }
+                            }
+                          }}
+                        />
+                        <Button 
+                          asChild
+                          className="w-full h-12 rounded-2xl aljava-gradient font-bold shadow-lg shadow-primary/20"
+                        >
+                          <label htmlFor="logo-upload" className="cursor-pointer flex items-center justify-center gap-2">
+                            <Upload className="w-5 h-5" />
+                            Alterar Logo
+                          </label>
+                        </Button>
+                        <p className="text-[10px] text-center text-slate-400 font-medium">Recomendado: PNG ou JPG, fundo transparente, 512x512px</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Label className="text-lg font-bold">Nome do Ministério</Label>
+                    <div className="space-y-4 p-8 bg-slate-50 rounded-[2rem] border border-slate-100">
+                      <div className="space-y-2">
+                        <Label htmlFor="app-name">Nome Exibido</Label>
+                        <Input 
+                          id="app-name"
+                          value={appSettings.appName}
+                          onChange={(e) => setAppSettings({ ...appSettings, appName: e.target.value })}
+                          className="h-12 rounded-xl border-slate-200"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="logo-url">URL da Logo</Label>
+                        <Input 
+                          id="logo-url"
+                          value={appSettings.logoUrl}
+                          onChange={(e) => setAppSettings({ ...appSettings, logoUrl: e.target.value })}
+                          placeholder="https://exemplo.com/logo.png"
+                          className="h-12 rounded-xl border-slate-200"
+                        />
+                      </div>
+                      <Button 
+                        onClick={async () => {
+                          try {
+                            await setDoc(doc(db, 'settings', 'app'), appSettings, { merge: true });
+                            toast.success('Configurações salvas!');
+                          } catch (error) {
+                            handleFirestoreError(error, OperationType.UPDATE, 'settings/app');
+                          }
+                        }}
+                        className="w-full h-12 rounded-xl bg-slate-900 text-white font-bold"
+                      >
+                        Salvar Configurações
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
           </main>
         </div>

@@ -85,6 +85,15 @@
         "fileName": { "type": "string", "description": "Name of the uploaded file" }
       },
       "required": ["name", "date", "type"]
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Application settings",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string", "description": "URL of the application logo" },
+        "appName": { "type": "string", "description": "Name of the application" }
+      }
     }
   },
   "firestore": {
@@ -93,6 +102,7 @@
     "/materials/{materialId}": { "schema": "material", "description": "Collection of ministry materials" },
     "/volunteers/{volunteerId}": { "schema": "volunteer", "description": "Collection of volunteers" },
     "/schedules/{scheduleId}": { "schema": "schedule", "description": "Collection of schedules" },
-    "/services/{serviceId}": { "schema": "service", "description": "Collection of church services" }
+    "/services/{serviceId}": { "schema": "service", "description": "Collection of church services" },
+    "/settings/{settingId}": { "schema": "settings", "description": "Application settings" }
   }
 }
