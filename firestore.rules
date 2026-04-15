@@ -11,8 +11,11 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "convitebrancadeneve@gmail.com" && request.auth.token.email_verified == true));
+        (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+          (request.auth.token.email == "convitebrancadeneve@gmail.com" && request.auth.token.email_verified == true)
+        );
     }
 
     function isValidString(val, min, max) {
@@ -112,7 +115,7 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if true; // Publicly readable for login screen
-      allow write: if isAdmin() && isValidSettings(request.resource.data);
+      allow write: if isAuthenticated() && isValidSettings(request.resource.data);
     }
 
     match /users/{userId} {
@@ -158,9 +161,5 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /settings/{settingId} {
-      allow read: if true; // Allow public read for logo/app name
-      allow write: if isAdmin();
-    }
   }
 }

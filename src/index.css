@@ -49,25 +49,25 @@
 }
 
 :root {
-    --background: #F8F9FA;
-    --foreground: #1A1C1E;
+    --background: #FDFDFD;
+    --foreground: #0F172A;
     --card: #FFFFFF;
-    --card-foreground: #1A1C1E;
+    --card-foreground: #0F172A;
     --popover: #FFFFFF;
-    --popover-foreground: #1A1C1E;
-    --primary: #2D5A27; /* Deep Forest Green - Aljava Theme */
-    --primary-foreground: #FFFFFF;
-    --secondary: #E9ECEF;
-    --secondary-foreground: #2D5A27;
-    --muted: #F1F3F5;
-    --muted-foreground: #6C757D;
-    --accent: #FFF4E6; /* Warm Peach/Orange accent */
-    --accent-foreground: #D9480F;
-    --destructive: #E03131;
-    --border: #DEE2E6;
-    --input: #DEE2E6;
-    --ring: #2D5A27;
-    --radius: 1rem;
+    --popover-foreground: #0F172A;
+    --primary: #1B4332; /* Richer Forest Green */
+    --primary-foreground: #F8FAF9;
+    --secondary: #F1F5F9;
+    --secondary-foreground: #1B4332;
+    --muted: #F8FAFC;
+    --muted-foreground: #64748B;
+    --accent: #FFF7ED; /* Soft Orange tint */
+    --accent-foreground: #EA580C; /* Vibrant Orange */
+    --destructive: #EF4444;
+    --border: #E2E8F0;
+    --input: #E2E8F0;
+    --ring: #1B4332;
+    --radius: 1.25rem;
 }
 
 @layer base {
@@ -75,20 +75,24 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary/10 selection:text-primary;
     }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-heading tracking-tight;
+    @apply font-heading tracking-tight font-bold;
     }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+    @apply bg-white/70 backdrop-blur-xl border border-white/40 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)];
   }
   
   .aljava-gradient {
-    @apply bg-gradient-to-br from-[#2D5A27] to-[#1E3A1A];
+    @apply bg-gradient-to-br from-[#1B4332] via-[#2D5A27] to-[#1B4332];
+  }
+
+  .bento-card {
+    @apply rounded-[2.5rem] border-none shadow-[0_10px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.1)] transition-all duration-500 bg-white;
   }
 }
 

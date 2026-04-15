@@ -71,7 +71,9 @@ import {
   QrCode,
   ScanLine,
   Share2,
-  Settings
+  Settings,
+  Database,
+  CheckCircle2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -81,6 +83,8 @@ import html2canvas from 'html2canvas';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import ReactMarkdown from 'react-markdown';
+
+import { seedData } from './data/seedData';
 
 import { db, auth, storage, OperationType, handleFirestoreError } from '@/src/lib/firebase';
 import { Child, Parent, Material, Volunteer, Schedule, Service } from '@/src/types';
@@ -167,6 +171,54 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [selectedChildForQr, setSelectedChildForQr] = useState<Child | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImportSeedData = async () => {
+    if (!isAdmin) return;
+    setIsImporting(true);
+    const t = toast.loading('Importando dados do ministério...');
+    
+    try {
+      for (const item of seedData) {
+        // Create family ID
+        const familyId = `family_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Add parents
+        const parentIds: string[] = [];
+        for (const p of item.parents) {
+          const parentRef = doc(collection(db, 'parents'));
+          await setDoc(parentRef, {
+            ...p,
+            familyId,
+            id: parentRef.id
+          });
+          parentIds.push(parentRef.id);
+        }
+        
+        // Add child
+        const childRef = doc(collection(db, 'children'));
+        await setDoc(childRef, {
+          name: item.name,
+          birthDate: item.birthDate,
+          status: item.status,
+          allergies: item.allergies,
+          specialNeeds: item.specialNeeds,
+          familyId,
+          parentIds,
+          parentId: parentIds[0], // Primary parent
+          id: childRef.id,
+          checkedIn: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+      toast.success('Dados importados com sucesso!', { id: t });
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      toast.error('Erro ao importar dados.', { id: t });
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const handleFileUpload = async (file: File, path: string): Promise<string> => {
     setIsUploadingPhoto(true);
@@ -1320,39 +1372,45 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8F9FA] p-4 relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#FDFDFD] p-4 relative overflow-hidden">
+        {/* Modern decorative elements */}
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent-foreground/5 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
         
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 max-w-md w-full text-center relative z-10 border border-slate-100"
+          initial={{ opacity: 0, y: 40, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className="glass-card p-12 rounded-[3rem] max-w-md w-full text-center relative z-10 border border-white/40 shadow-2xl"
         >
-          <div className="mb-8">
-            <div className="w-24 h-24 bg-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-6">
+          <div className="mb-10">
+            <motion.div 
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.2, duration: 0.5 }}
+              className="w-28 h-28 bg-white rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-xl shadow-primary/10 border border-slate-50"
+            >
               <img 
                 src={appSettings.logoUrl} 
                 alt={`${appSettings.appName} Logo`} 
-                className="w-16 h-16 object-contain"
+                className="w-20 h-20 object-contain"
                 referrerPolicy="no-referrer"
               />
-            </div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-3 tracking-tight">{appSettings.appName}</h1>
-            <p className="text-slate-500 text-lg leading-relaxed">Gestão inteligente para o seu ministério infantil</p>
+            </motion.div>
+            <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight leading-tight">{appSettings.appName}</h1>
+            <p className="text-slate-500 text-lg font-medium leading-relaxed opacity-80">Gestão inteligente para o seu ministério infantil</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2 text-left">
-              <Label htmlFor="password">Senha de Acesso</Label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-3 text-left">
+              <Label htmlFor="password" title="Senha de Acesso" className="text-xs font-bold uppercase tracking-widest text-slate-400 ml-1">Senha de Acesso</Label>
+              <div className="relative group">
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary transition-colors" />
                 <Input 
                   id="password"
                   type="password" 
-                  placeholder="Digite a senha" 
-                  className="h-14 pl-12 rounded-2xl border-slate-200 focus:ring-primary"
+                  placeholder="••••••••" 
+                  className="h-16 pl-14 rounded-2xl border-slate-200 focus:ring-primary bg-slate-50/50 border-none shadow-inner"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -1363,15 +1421,22 @@ export default function App() {
             <Button 
               type="submit" 
               disabled={isLoggingIn}
-              className="w-full h-14 text-lg rounded-2xl aljava-gradient hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+              className="w-full h-16 text-lg font-bold rounded-2xl aljava-gradient hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-primary/20"
             >
-              {isLoggingIn ? 'Entrando...' : 'Entrar'}
+              {isLoggingIn ? (
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 animate-spin" />
+                  <span>Entrando...</span>
+                </div>
+              ) : 'Entrar no Sistema'}
             </Button>
           </form>
           
-          <p className="mt-8 text-sm text-slate-400">
-            Acesso exclusivo para coordenadores e líderes
-          </p>
+          <div className="mt-10 pt-8 border-t border-slate-100">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+              Acesso Restrito
+            </p>
+          </div>
         </motion.div>
       </div>
     );
@@ -1381,69 +1446,67 @@ export default function App() {
     <div className="min-h-screen bg-[#F8F9FA]">
       <Tabs defaultValue="dashboard" className="flex flex-col lg:flex-row min-h-screen">
         {/* Sidebar Desktop */}
-        <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col sticky top-0 h-screen z-40">
-          <div className="p-8 flex items-center gap-4 border-b border-slate-50">
-            <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center">
+        <aside className="hidden lg:flex w-80 bg-white border-r border-slate-100 flex-col sticky top-0 h-screen z-40 shadow-[10px_0_40px_-20px_rgba(0,0,0,0.03)]">
+          <div className="p-10 flex items-center gap-4">
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/5 border border-slate-50">
               <img 
                 src={appSettings.logoUrl} 
                 alt={appSettings.appName} 
-                className="w-8 h-8 object-contain"
+                className="w-10 h-10 object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <span className="font-bold text-2xl text-slate-900 block leading-none">{appSettings.appName.split(' ')[0]}</span>
-              <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] font-bold">{appSettings.appName.split(' ').slice(1).join(' ')}</span>
+              <span className="font-black text-2xl text-slate-900 block leading-none tracking-tight">{appSettings.appName.split(' ')[0]}</span>
+              <span className="text-[10px] text-primary font-black uppercase tracking-[0.3em] mt-1 block">{appSettings.appName.split(' ').slice(1).join(' ')}</span>
             </div>
           </div>
 
-          <div className="flex-1 p-6 overflow-y-auto">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6 ml-2">Menu Principal</p>
-            <TabsList className="flex flex-col h-auto bg-transparent border-none space-y-2 p-0">
-              <TabsTrigger value="dashboard" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                <LayoutDashboard className="w-5 h-5 mr-3" />
-                Geral
-              </TabsTrigger>
-              <TabsTrigger value="checkin" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                <ScanLine className="w-5 h-5 mr-3" />
-                Check-in/Check-out
-              </TabsTrigger>
-              <TabsTrigger value="children" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                <Users className="w-5 h-5 mr-3" />
-                Cadastro de Crianças
-              </TabsTrigger>
-              <TabsTrigger value="birthdays" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                <Cake className="w-5 h-5 mr-3" />
-                Aniversariantes
-              </TabsTrigger>
-              <TabsTrigger value="services" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                <Calendar className="w-5 h-5 mr-3" />
-                Cultos/Rede
-              </TabsTrigger>
-              {isAdmin && (
-                <>
-                  <div className="pt-4 pb-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-2">Coordenação</p>
-                  </div>
-                  <TabsTrigger value="schedules" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                    <CalendarDays className="w-5 h-5 mr-3" />
-                    Escalas
+          <div className="flex-1 px-6 overflow-y-auto">
+            <div className="mb-8 px-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Menu Principal</p>
+              <TabsList className="flex flex-col h-auto bg-transparent border-none space-y-2 p-0">
+                {[
+                  { value: 'dashboard', icon: LayoutDashboard, label: 'Geral' },
+                  { value: 'checkin', icon: ScanLine, label: 'Check-in/Out' },
+                  { value: 'children', icon: Users, label: 'Flechas' },
+                  { value: 'birthdays', icon: Cake, label: 'Aniversários' },
+                  { value: 'services', icon: Calendar, label: 'Cultos & Redes' }
+                ].map((item) => (
+                  <TabsTrigger 
+                    key={item.value}
+                    value={item.value} 
+                    className="w-full justify-start h-14 px-6 rounded-2xl data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-xl data-[state=active]:shadow-primary/20 hover:bg-slate-50 transition-all border-none group"
+                  >
+                    <item.icon className="w-5 h-5 mr-4 group-data-[state=active]:scale-110 transition-transform" />
+                    <span className="font-bold">{item.label}</span>
                   </TabsTrigger>
-                  <TabsTrigger value="volunteers" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                    <UserCheck className="w-5 h-5 mr-3" />
-                    Voluntários
-                  </TabsTrigger>
-                  <TabsTrigger value="coordination" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                    <Package className="w-5 h-5 mr-3" />
-                    Materiais
-                  </TabsTrigger>
-                  <TabsTrigger value="settings" className="w-full justify-start h-12 px-4 rounded-xl data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:shadow-none hover:bg-slate-50 transition-all border-none">
-                    <Settings className="w-5 h-5 mr-3" />
-                    Configurações
-                  </TabsTrigger>
-                </>
-              )}
-            </TabsList>
+                ))}
+              </TabsList>
+            </div>
+
+            {isAdmin && (
+              <div className="px-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Coordenação</p>
+                <TabsList className="flex flex-col h-auto bg-transparent border-none space-y-2 p-0">
+                  {[
+                    { value: 'schedules', icon: CalendarDays, label: 'Escalas' },
+                    { value: 'volunteers', icon: UserCheck, label: 'Voluntários' },
+                    { value: 'coordination', icon: Package, label: 'Materiais' },
+                    { value: 'settings', icon: Settings, label: 'Configurações' }
+                  ].map((item) => (
+                    <TabsTrigger 
+                      key={item.value}
+                      value={item.value} 
+                      className="w-full justify-start h-14 px-6 rounded-2xl data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-xl data-[state=active]:shadow-primary/20 hover:bg-slate-50 transition-all border-none group"
+                    >
+                      <item.icon className="w-5 h-5 mr-4 group-data-[state=active]:scale-110 transition-transform" />
+                      <span className="font-bold">{item.label}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            )}
           </div>
 
           <div className="p-6 border-t border-slate-50 bg-slate-50/30">
@@ -1638,57 +1701,83 @@ export default function App() {
           <main className="max-w-7xl mx-auto w-full px-4 lg:px-10 py-8 lg:py-12">
             {/* TabsContent will go here */}
 
-          <TabsContent value="dashboard" className="space-y-8">
+          <TabsContent value="dashboard" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {isAdmin && (
-              <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                    <UserPlus className="w-6 h-6" />
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bento-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-slate-50"
+              >
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-primary/5 rounded-[1.5rem] flex items-center justify-center text-primary shadow-inner">
+                    <UserPlus className="w-8 h-8" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Cadastro Rápido</h3>
-                    <p className="text-sm text-slate-500">Adicione uma nova flecha ao ministério agora mesmo</p>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Cadastro Rápido</h3>
+                    <p className="text-slate-500 font-medium">Adicione uma nova flecha ao ministério agora mesmo</p>
                   </div>
                 </div>
                 <Button 
                   onClick={() => setIsChildDialogOpen(true)} 
-                  className="w-full md:w-auto h-12 rounded-2xl aljava-gradient px-8 shadow-lg shadow-primary/20 text-lg font-bold"
+                  className="w-full md:w-auto h-16 rounded-2xl aljava-gradient px-10 shadow-xl shadow-primary/20 text-lg font-black hover:scale-[1.02] transition-transform"
                 >
-                  <Plus className="w-5 h-5 mr-2" />
+                  <Plus className="w-6 h-6 mr-2" />
                   Cadastrar Nova Criança
                 </Button>
-              </div>
+              </motion.div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {[
-                { id: 'G1', label: 'G1 (1-3 anos)', color: 'from-blue-500 to-blue-600', icon: Baby },
-                { id: 'G2', label: 'G2 (4-5 anos)', color: 'from-purple-500 to-purple-600', icon: Users },
-                { id: 'G3', label: 'G3 (6-7 anos)', color: 'from-emerald-500 to-emerald-600', icon: School },
-                { id: 'G4', label: 'G4 (8-9 anos)', color: 'from-orange-500 to-orange-600', icon: ShieldCheck }
-              ].map(group => (
-                <Card 
-                  key={group.id} 
-                  className={`rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-gradient-to-br ${group.color} text-white cursor-pointer hover:scale-[1.02] transition-all relative overflow-hidden group`}
-                  onClick={() => setSelectedGroup(group)}
-                >
-                  <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform">
-                    <group.icon className="w-32 h-32" />
-                  </div>
-                  <CardHeader className="p-6 relative z-10">
-                    <CardTitle className="text-sm font-bold uppercase tracking-widest opacity-80">{group.label}</CardTitle>
-                    <div className="text-4xl font-black mt-2">
-                      {children.filter(c => getAgeGroup(c.birthDate).id === group.id).length}
-                    </div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider mt-1 opacity-70">
-                    {children.filter(c => getAgeGroup(c.birthDate).id === group.id && (c.status === 'Ativa' || c.status === undefined)).length} Ativas
-                    </div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider mt-2 flex items-center gap-1 opacity-70">
-                      Clique para ver lista <ArrowRight className="w-3 h-3" />
-                    </div>
-                  </CardHeader>
-                </Card>
-              ))}
+                { id: 'G1', label: 'G1 (1-3 anos)', color: 'from-blue-500 to-blue-600', icon: Baby, lightColor: 'bg-blue-50', textColor: 'text-blue-600' },
+                { id: 'G2', label: 'G2 (4-5 anos)', color: 'from-purple-500 to-purple-600', icon: Users, lightColor: 'bg-purple-50', textColor: 'text-purple-600' },
+                { id: 'G3', label: 'G3 (6-7 anos)', color: 'from-emerald-500 to-emerald-600', icon: School, lightColor: 'bg-emerald-50', textColor: 'text-emerald-600' },
+                { id: 'G4', label: 'G4 (8-9 anos)', color: 'from-amber-500 to-amber-600', icon: ShieldCheck, lightColor: 'bg-amber-50', textColor: 'text-amber-600' }
+              ].map((group, idx) => {
+                const groupChildren = children.filter(c => getAgeGroup(c.birthDate).id === group.id);
+                const activeCount = groupChildren.filter(c => c.status === 'Ativa' || c.status === undefined).length;
+                
+                return (
+                  <motion.div
+                    key={group.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                  >
+                    <Card 
+                      className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white cursor-pointer hover:scale-[1.02] hover:shadow-2xl transition-all duration-500 relative overflow-hidden group h-full"
+                      onClick={() => setSelectedGroup(group)}
+                    >
+                      <div className={`absolute top-0 left-0 w-2 h-full bg-gradient-to-b ${group.color}`} />
+                      <CardHeader className="p-8 relative z-10">
+                        <div className="flex justify-between items-start">
+                          <div className={`w-14 h-14 ${group.lightColor} ${group.textColor} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500`}>
+                            <group.icon className="w-7 h-7" />
+                          </div>
+                          <Badge variant="secondary" className="rounded-full px-3 py-1 bg-slate-50 text-slate-500 border-none font-bold">
+                            {group.id}
+                          </Badge>
+                        </div>
+                        <div className="mt-6">
+                          <CardTitle className="text-sm font-black uppercase tracking-[0.15em] text-slate-400">{group.label}</CardTitle>
+                          <div className="text-5xl font-black mt-2 text-slate-900 tracking-tighter">
+                            {groupChildren.length}
+                          </div>
+                        </div>
+                        <div className="mt-6 flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ativas</span>
+                            <span className={`text-sm font-black ${group.textColor}`}>{activeCount}</span>
+                          </div>
+                          <div className={`w-10 h-10 ${group.lightColor} ${group.textColor} rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-x-4 group-hover:translate-x-0`}>
+                            <ArrowRight className="w-5 h-5" />
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </motion.div>
+                );
+              })}
             </div>
 
             <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
@@ -1744,123 +1833,158 @@ export default function App() {
               </DialogContent>
             </Dialog>
 
-            <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6`}>
-              <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100">
-                <CardHeader className="p-6">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-primary" />
+            <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-2'} gap-8`}>
+              <Card className="bento-card group overflow-hidden border-none shadow-xl shadow-slate-200/50">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                <CardHeader className="p-8 pb-4 relative z-10">
+                  <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400 group-hover:text-primary transition-colors">
+                    <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
                     Flechas Ativas
                   </CardTitle>
-                  <CardDescription>Crianças frequentando</CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 pt-0">
-                  <div className="text-5xl font-black text-primary">
+                <CardContent className="p-8 pt-0 relative z-10">
+                  <div className="text-6xl font-black text-slate-900 tracking-tighter">
                     {children.filter(c => c.status === 'Ativa' || c.status === undefined).length}
                   </div>
-                  <p className="text-sm text-slate-500 mt-2">Total de {children.length} cadastradas</p>
+                  <div className="flex items-center justify-between mt-6">
+                    <p className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                      <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      Total de {children.length}
+                    </p>
+                    <Badge className="bg-green-50 text-green-600 border-none font-black text-[10px]">
+                      {children.length > 0 ? Math.round((children.filter(c => c.status === 'Ativa' || c.status === undefined).length / children.length) * 100) : 0}%
+                    </Badge>
+                  </div>
                 </CardContent>
               </Card>
 
-              <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100">
-                <CardHeader className="p-6">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <UserMinus className="w-5 h-5 text-amber-500" />
+              <Card className="bento-card group overflow-hidden border-none shadow-xl shadow-slate-200/50">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                <CardHeader className="p-8 pb-4 relative z-10">
+                  <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400 group-hover:text-amber-500 transition-colors">
+                    <div className="w-10 h-10 bg-amber-500/5 rounded-xl flex items-center justify-center text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all duration-500">
+                      <UserMinus className="w-5 h-5" />
+                    </div>
                     Flechas Inativas
                   </CardTitle>
-                  <CardDescription>Aguardando retorno</CardDescription>
                 </CardHeader>
-                <CardContent className="p-6 pt-0">
-                  <div className="text-5xl font-black text-amber-500">
+                <CardContent className="p-8 pt-0 relative z-10">
+                  <div className="text-6xl font-black text-slate-900 tracking-tighter">
                     {children.filter(c => c.status === 'Inativa').length}
                   </div>
-                  <p className="text-sm text-slate-500 mt-2">Crianças que não frequentam</p>
+                  <p className="text-sm font-medium text-slate-400 mt-6">Aguardando retorno</p>
                 </CardContent>
               </Card>
 
               {isAdmin && (
-                <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100">
-                  <CardHeader className="p-6">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <Users className="w-5 h-5 text-blue-500" />
+                <Card className="bento-card group overflow-hidden border-none shadow-xl shadow-slate-200/50">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                  <CardHeader className="p-8 pb-4 relative z-10">
+                    <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400 group-hover:text-blue-500 transition-colors">
+                      <div className="w-10 h-10 bg-blue-500/5 rounded-xl flex items-center justify-center text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all duration-500">
+                        <Users className="w-5 h-5" />
+                      </div>
                       Equipe {appSettings.appName}
                     </CardTitle>
-                    <CardDescription>Ministros e Auxiliares</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    <div className="flex gap-4 items-end">
+                  <CardContent className="p-8 pt-0 relative z-10">
+                    <div className="flex gap-8 items-end">
                       <div>
-                        <div className="text-5xl font-black text-blue-500">
+                        <div className="text-6xl font-black text-slate-900 tracking-tighter">
                           {volunteers.filter(v => v.role === 'Ministro').length}
                         </div>
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Ministros</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mt-2">Ministros</p>
                       </div>
-                      <div className="h-10 w-px bg-slate-100 mb-2"></div>
+                      <div className="h-12 w-px bg-slate-100 mb-2"></div>
                       <div>
-                        <div className="text-5xl font-black text-slate-400">
+                        <div className="text-6xl font-black text-slate-400 tracking-tighter">
                           {volunteers.filter(v => v.role === 'Auxiliar').length}
                         </div>
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Auxiliares</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2">Auxiliares</p>
                       </div>
                     </div>
-                    <p className="text-sm text-slate-500 mt-2">Total de {volunteers.length} voluntários</p>
                   </CardContent>
                 </Card>
               )}
 
               {isAdmin && (
-                <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100">
-                  <CardHeader className="p-6">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-red-500" />
+                <Card className="bento-card group overflow-hidden border-none shadow-xl shadow-slate-200/50">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-700" />
+                  <CardHeader className="p-8 pb-4 relative z-10">
+                    <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400 group-hover:text-red-500 transition-colors">
+                      <div className="w-10 h-10 bg-red-500/5 rounded-xl flex items-center justify-center text-red-500 group-hover:bg-red-500 group-hover:text-white transition-all duration-500">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
                       Materiais em Alerta
                     </CardTitle>
-                    <CardDescription>Itens com estoque baixo</CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    <div className="text-5xl font-black text-red-500">
-                      {materials.filter(m => m.quantity <= m.minQuantity).length}
+                  <CardContent className="p-8 pt-0 relative z-10">
+                    <div className="flex items-center justify-between">
+                      <div className="text-6xl font-black text-slate-900 tracking-tighter">
+                        {materials.filter(m => m.quantity <= m.minQuantity).length}
+                      </div>
+                      {materials.filter(m => m.quantity <= m.minQuantity).length > 0 && (
+                        <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center animate-bounce">
+                          <AlertCircle className="w-6 h-6 text-red-500" />
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-500 mt-2">Necessitam de reposição</p>
+                    <p className="text-sm font-medium text-slate-400 mt-6">Itens abaixo do estoque mínimo</p>
                   </CardContent>
                 </Card>
               )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {isAdmin && (
-                <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100 overflow-hidden">
-                  <CardHeader className="p-6 bg-orange-50/50 border-b border-orange-100">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-orange-700">
-                      <AlertCircle className="w-5 h-5" />
-                      Avisos de Materiais
+                <Card className="bento-card overflow-hidden group border-none shadow-2xl shadow-orange-200/20">
+                  <CardHeader className="p-8 bg-orange-50/30 border-b border-orange-100/50">
+                    <CardTitle className="text-xl font-black flex items-center gap-3 text-orange-700">
+                      <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-500">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      Materiais Críticos
                     </CardTitle>
-                    <CardDescription className="text-orange-600/70">Itens com estoque baixo</CardDescription>
+                    <CardDescription className="text-orange-600/70 font-medium">Itens que precisam de reposição</CardDescription>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <ScrollArea className="h-[350px]">
+                    <ScrollArea className="h-[400px]">
                       <div className="p-6 space-y-4">
-                        {materials.filter(m => m.quantity <= m.minQuantity).map(material => (
-                          <div key={material.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
-                                <AlertCircle className="w-4 h-4" />
-                              </div>
-                              <div>
-                                <div className="font-bold text-sm">{material.name}</div>
-                                <div className="text-[10px] text-orange-600 font-bold uppercase">
-                                  Estoque: {material.quantity} (Mín: {material.minQuantity})
+                        {materials.filter(m => m.quantity <= m.minQuantity).length > 0 ? (
+                          materials
+                            .filter(m => m.quantity <= m.minQuantity)
+                            .map(m => (
+                              <div key={m.id} className="p-5 flex items-center justify-between bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all group/item shadow-sm hover:shadow-md">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center border border-orange-100 group-hover/item:scale-110 transition-transform">
+                                    <Package className="w-6 h-6 text-orange-400" />
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-slate-900 text-lg leading-tight">{m.name}</p>
+                                    <p className="text-xs font-medium text-slate-500 mt-1">
+                                      Estoque: <span className="text-red-500 font-black">{m.quantity}</span> / Mín: {m.minQuantity}
+                                    </p>
+                                  </div>
                                 </div>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  className="rounded-full px-4 border-orange-200 text-orange-600 hover:bg-orange-50 font-bold" 
+                                  onClick={() => updateMaterialQuantity(m, 5)}
+                                >
+                                  Repor
+                                </Button>
                               </div>
+                            ))
+                        ) : (
+                          <div className="py-20 text-center text-slate-400">
+                            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                              <CheckCircle2 className="w-10 h-10 text-green-500" />
                             </div>
-                            <Button size="sm" variant="ghost" className="text-primary hover:bg-primary/5" onClick={() => updateMaterialQuantity(material, 5)}>
-                              Repor
-                            </Button>
-                          </div>
-                        ))}
-                        {materials.filter(m => m.quantity <= m.minQuantity).length === 0 && (
-                          <div className="text-center py-12 text-slate-400 italic">
-                            <CheckCircle className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                            Tudo em ordem com o estoque!
+                            <p className="font-black text-lg text-slate-600">Estoque em dia!</p>
+                            <p className="text-sm mt-2">Nenhum item em alerta.</p>
                           </div>
                         )}
                       </div>
@@ -1869,16 +1993,18 @@ export default function App() {
                 </Card>
               )}
 
-              <Card className="rounded-[2rem] border-none shadow-lg shadow-slate-200/50 bg-white border border-slate-100 overflow-hidden">
-                <CardHeader className="p-6 bg-pink-50/50 border-b border-pink-100">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2 text-pink-700">
-                    <Cake className="w-5 h-5" />
-                    Aniversariantes do Mês
+              <Card className="bento-card overflow-hidden group border-none shadow-2xl shadow-pink-200/20">
+                <CardHeader className="p-8 bg-pink-50/30 border-b border-pink-100/50">
+                  <CardTitle className="text-xl font-black flex items-center gap-3 text-pink-700">
+                    <div className="w-12 h-12 bg-pink-100 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-500">
+                      <Cake className="w-6 h-6" />
+                    </div>
+                    Aniversariantes
                   </CardTitle>
-                  <CardDescription className="text-pink-600/70">Celebrando a vida na {appSettings.appName}</CardDescription>
+                  <CardDescription className="text-pink-600/70 font-medium">Celebrando a vida este mês</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[350px]">
+                  <ScrollArea className="h-[400px]">
                     <div className="p-6 space-y-4">
                       {/* Children Birthdays */}
                       {children
@@ -1890,19 +2016,19 @@ export default function App() {
                         .map(child => {
                           const parent = parents.find(p => (child.familyId && p.familyId === child.familyId) || p.id === child.parentId);
                           return (
-                            <div key={child.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-pink-100 rounded-lg flex items-center justify-center text-pink-600">
-                                  <Baby className="w-4 h-4" />
+                            <div key={child.id} className="p-5 flex items-center justify-between bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all group/item shadow-sm hover:shadow-md">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-pink-50 rounded-xl flex items-center justify-center border border-pink-100 group-hover/item:scale-110 transition-transform">
+                                  <Baby className="w-6 h-6 text-pink-400" />
                                 </div>
                                 <div>
-                                  <div className="font-bold text-sm">{child.name}</div>
-                                  <div className="text-[10px] text-slate-500 uppercase font-bold">Criança • Dia {parseInt(child.birthDate.split('-')[2], 10)}</div>
+                                  <p className="font-bold text-slate-900 text-lg leading-tight">{child.name}</p>
+                                  <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Flecha • Dia {parseInt(child.birthDate.split('-')[2], 10)}</p>
                                 </div>
                               </div>
                               {parent && (
-                                <Button size="sm" variant="ghost" className="text-green-600 hover:bg-green-50" onClick={() => sendBirthdayMessage(child, parent)}>
-                                  <MessageCircle className="w-4 h-4" />
+                                <Button size="sm" variant="ghost" className="rounded-full w-10 h-10 p-0 text-green-600 hover:bg-green-50" onClick={() => sendBirthdayMessage(child, parent)}>
+                                  <MessageCircle className="w-5 h-5" />
                                 </Button>
                               )}
                             </div>
@@ -1918,18 +2044,18 @@ export default function App() {
                         })
                         .sort((a, b) => parseInt(a.birthDate!.split('-')[2], 10) - parseInt(b.birthDate!.split('-')[2], 10))
                         .map(v => (
-                          <div key={v.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
-                                <UserCheck className="w-4 h-4" />
+                          <div key={v.id} className="p-5 flex items-center justify-between bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all group/item shadow-sm hover:shadow-md">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100 group-hover/item:scale-110 transition-transform">
+                                <UserCheck className="w-6 h-6 text-blue-400" />
                               </div>
                               <div>
-                                <div className="font-bold text-sm">{v.name}</div>
-                                <div className="text-[10px] text-slate-500 uppercase font-bold">Voluntário • Dia {parseInt(v.birthDate!.split('-')[2], 10)}</div>
+                                <p className="font-bold text-slate-900 text-lg leading-tight">{v.name}</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-1">Voluntário • Dia {parseInt(v.birthDate!.split('-')[2], 10)}</p>
                               </div>
                             </div>
-                            <Button size="sm" variant="ghost" className="text-green-600 hover:bg-green-50" onClick={() => sendVolunteerBirthdayMessage(v)}>
-                              <MessageCircle className="w-4 h-4" />
+                            <Button size="sm" variant="ghost" className="rounded-full w-10 h-10 p-0 text-green-600 hover:bg-green-50" onClick={() => sendVolunteerBirthdayMessage(v)}>
+                              <MessageCircle className="w-5 h-5" />
                             </Button>
                           </div>
                         ))
@@ -1944,9 +2070,63 @@ export default function App() {
                         const parts = v.birthDate.split('-');
                         return parts.length === 3 && (parseInt(parts[1], 10) - 1) === new Date().getMonth();
                       }).length === 0 && (
-                        <div className="text-center py-12 text-slate-400 italic">
-                          <Cake className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                          Nenhum aniversariante este mês.
+                        <div className="py-20 text-center text-slate-400">
+                          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Cake className="w-10 h-10 opacity-20" />
+                          </div>
+                          <p className="font-black text-lg text-slate-600">Nenhum aniversariante.</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Card className="bento-card overflow-hidden group border-none shadow-2xl shadow-slate-200/20">
+                <CardHeader className="p-8 bg-slate-50/30 border-b border-slate-100/50">
+                  <CardTitle className="text-xl font-black flex items-center gap-3 text-slate-900">
+                    <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-500 text-primary">
+                      <Calendar className="w-6 h-6" />
+                    </div>
+                    Próximos Cultos
+                  </CardTitle>
+                  <CardDescription className="font-medium text-slate-500">Escala de voluntários</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[400px]">
+                    <div className="p-6 space-y-4">
+                      {schedules
+                        .filter(s => new Date(s.date) >= new Date(new Date().setHours(0,0,0,0)))
+                        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                        .slice(0, 6)
+                        .map(s => {
+                          const volunteer = volunteers.find(v => v.id === s.volunteerId);
+                          return (
+                            <div key={s.id} className="p-5 flex items-center justify-between bg-white rounded-2xl border border-slate-100 hover:bg-slate-50 transition-all group/item shadow-sm hover:shadow-md">
+                              <div className="flex items-center gap-4">
+                                <div className="text-center bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-inner min-w-[65px] group-hover/item:bg-primary group-hover/item:text-white transition-colors duration-500">
+                                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60">
+                                    {new Date(s.date).toLocaleDateString('pt-BR', { month: 'short' })}
+                                  </p>
+                                  <p className="text-2xl font-black leading-none mt-1">
+                                    {new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit' })}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-900 text-lg leading-tight">{volunteer?.name || 'Não definido'}</p>
+                                  <p className="text-xs font-medium text-slate-500 mt-1">{s.shift} • <span className="text-primary font-bold">{s.groupId}</span></p>
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="rounded-full font-black uppercase tracking-widest text-[10px] px-3 py-1 bg-slate-50 border-slate-200">{s.shift}</Badge>
+                            </div>
+                          );
+                        })}
+                      {schedules.filter(s => new Date(s.date) >= new Date()).length === 0 && (
+                        <div className="py-20 text-center text-slate-400">
+                          <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <CalendarDays className="w-10 h-10 opacity-20" />
+                          </div>
+                          <p className="font-black text-lg text-slate-600">Nenhuma escala.</p>
                         </div>
                       )}
                     </div>
@@ -1956,84 +2136,86 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="checkin" className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <TabsContent value="checkin" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
               {/* Scanner e Ações Rápidas */}
-              <div className="lg:col-span-1 space-y-6">
-                <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
-                  <div className="p-8 aljava-gradient text-white">
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                      <ScanLine className="w-6 h-6" />
-                      Scanner QR Code
+              <div className="lg:col-span-1 space-y-8">
+                <Card className="bento-card overflow-hidden">
+                  <div className="p-10 aljava-gradient text-white">
+                    <h2 className="text-3xl font-black flex items-center gap-3 tracking-tight">
+                      <ScanLine className="w-8 h-8" />
+                      Scanner QR
                     </h2>
-                    <p className="text-white/70 text-sm mt-1">Aponte a câmera para o QR Code da criança</p>
+                    <p className="text-white/70 font-medium mt-2">Aponte a câmera para o QR Code</p>
                   </div>
-                  <CardContent className="p-8">
+                  <CardContent className="p-10">
                     {!isScannerOpen ? (
                       <Button 
                         onClick={() => setIsScannerOpen(true)}
-                        className="w-full h-32 rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-primary/30 transition-all flex flex-col gap-3 text-slate-500 hover:text-primary"
+                        className="w-full h-40 rounded-[2rem] border-2 border-dashed border-slate-100 bg-slate-50/50 hover:bg-slate-50 hover:border-primary/30 transition-all flex flex-col gap-4 text-slate-400 hover:text-primary group"
                       >
-                        <QrCode className="w-10 h-10" />
-                        <span className="font-bold">Abrir Câmera</span>
+                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                          <QrCode className="w-8 h-8" />
+                        </div>
+                        <span className="font-black uppercase tracking-widest text-xs">Abrir Câmera</span>
                       </Button>
                     ) : (
-                      <div className="space-y-4">
-                        <div id="reader" className="overflow-hidden rounded-2xl border-2 border-primary/20"></div>
+                      <div className="space-y-6">
+                        <div id="reader" className="overflow-hidden rounded-[2rem] border-4 border-primary/10 shadow-inner"></div>
                         <Button 
                           variant="ghost" 
                           onClick={() => setIsScannerOpen(false)}
-                          className="w-full h-12 rounded-xl text-red-500 hover:bg-red-50 font-bold"
+                          className="w-full h-14 rounded-2xl text-red-500 hover:bg-red-50 font-black uppercase tracking-widest text-xs"
                         >
                           Cancelar Scanner
                         </Button>
                       </div>
                     )}
 
-                    <div className="mt-8 pt-8 border-t border-slate-100">
-                      <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <div className="mt-10 pt-10 border-t border-slate-50">
+                      <h3 className="text-xs font-black text-slate-900 mb-6 flex items-center gap-2 uppercase tracking-[0.2em]">
                         <Info className="w-4 h-4 text-primary" />
-                        Como funciona?
+                        Instruções
                       </h3>
-                      <ul className="space-y-3 text-xs text-slate-500 leading-relaxed">
-                        <li className="flex gap-2">
-                          <div className="w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold text-[8px]">1</div>
-                          Escaneie o QR Code no cartão de entrada enviado aos pais.
-                        </li>
-                        <li className="flex gap-2">
-                          <div className="w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold text-[8px]">2</div>
-                          O sistema identificará a criança e registrará a entrada/saída.
-                        </li>
-                        <li className="flex gap-2">
-                          <div className="w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold text-[8px]">3</div>
-                          Para pais sem celular, use a busca manual ao lado.
-                        </li>
+                      <ul className="space-y-4">
+                        {[
+                          "Escaneie o QR Code no cartão de entrada enviado aos pais.",
+                          "O sistema identificará a criança e registrará a entrada/saída.",
+                          "Para pais sem celular, use a busca manual ao lado."
+                        ].map((text, i) => (
+                          <li key={i} className="flex gap-4 items-start">
+                            <div className="w-6 h-6 rounded-lg bg-primary/5 text-primary flex items-center justify-center flex-shrink-0 font-black text-[10px]">{i + 1}</div>
+                            <p className="text-sm font-medium text-slate-500 leading-relaxed">{text}</p>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Resumo de Presença */}
-                <Card className="rounded-[2.5rem] border-none shadow-lg shadow-slate-200/50 bg-white">
-                  <CardHeader className="p-6">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <Users className="w-5 h-5 text-primary" />
+                <Card className="bento-card group">
+                  <CardHeader className="p-10">
+                    <CardTitle className="text-2xl font-black flex items-center gap-4 text-slate-900">
+                      <div className="w-14 h-14 bg-primary/5 rounded-2xl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner">
+                        <Users className="w-8 h-8" />
+                      </div>
                       Presença Hoje
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-primary/5 p-4 rounded-2xl">
-                        <div className="text-2xl font-black text-primary">
+                  <CardContent className="p-10 pt-0">
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10">
+                        <div className="text-4xl font-black text-primary tracking-tighter">
                           {children.filter(c => c.checkedIn).length}
                         </div>
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Presentes</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-2">Presentes</p>
                       </div>
-                      <div className="bg-slate-50 p-4 rounded-2xl">
-                        <div className="text-2xl font-black text-slate-400">
+                      <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                        <div className="text-4xl font-black text-slate-400 tracking-tighter">
                           {children.filter(c => !c.checkedIn && c.status === 'Ativa').length}
                         </div>
-                        <p className="text-[10px] font-bold uppercase text-slate-400">Ausentes</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-2">Ausentes</p>
                       </div>
                     </div>
                   </CardContent>
@@ -2041,20 +2223,20 @@ export default function App() {
               </div>
 
               {/* Busca Manual e Lista */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100">
-                  <div className="relative w-full">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <div className="lg:col-span-2 space-y-8">
+                <div className="flex flex-col md:flex-row gap-6 items-center justify-between bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+                  <div className="relative w-full group">
+                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary transition-colors" />
                     <Input 
                       placeholder="Busca manual (nome da criança ou responsável)..." 
-                      className="pl-11 h-12 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all"
+                      className="pl-14 h-16 rounded-2xl border-none bg-slate-50/50 focus:bg-white transition-all shadow-inner text-lg font-medium"
                       value={checkinSearch}
                       onChange={(e) => setCheckinSearch(e.target.value)}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {children
                     .filter(child => {
                       const search = checkinSearch.toLowerCase();
@@ -2063,55 +2245,59 @@ export default function App() {
                              (parent && parent.name.toLowerCase().includes(search)) ||
                              (parent && parent.phone.includes(search));
                     })
-                    .slice(0, 10)
+                    .slice(0, 12)
                     .map(child => {
                       const parent = parents.find(p => (child.familyId && p.familyId === child.familyId) || p.id === child.parentId);
                       return (
-                        <Card key={child.id} className={`rounded-3xl border-none shadow-md transition-all ${child.checkedIn ? 'bg-green-50/30 ring-1 ring-green-100' : 'bg-white'}`}>
-                          <CardContent className="p-5">
-                            <div className="flex justify-between items-start">
-                              <div className="flex gap-3">
-                                {child.photoUrl ? (
-                                  <img src={child.photoUrl} alt={child.name} className="w-12 h-12 rounded-2xl object-cover border-2 border-slate-50 shadow-sm" referrerPolicy="no-referrer" />
-                                ) : (
-                                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${child.checkedIn ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
-                                    <Baby className="w-6 h-6" />
-                                  </div>
-                                )}
-                                <div>
-                                  <h4 className="font-bold text-slate-900">{child.name}</h4>
-                                  <p className="text-xs text-slate-500">{parent?.name || 'Responsável não cadastrado'}</p>
-                                  {child.checkedIn && child.lastCheckIn && (
-                                    <p className="text-[10px] text-green-600 font-bold mt-1 flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      Entrou às {format(new Date(child.lastCheckIn), 'HH:mm')}
-                                    </p>
+                        <motion.div
+                          key={child.id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
+                          <Card className={`rounded-[2.5rem] border-none shadow-xl transition-all duration-500 hover:scale-[1.02] ${child.checkedIn ? 'bg-green-50/50 ring-2 ring-green-100' : 'bg-white shadow-slate-200/50'}`}>
+                            <CardContent className="p-8">
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="flex gap-5">
+                                  {child.photoUrl ? (
+                                    <img src={child.photoUrl} alt={child.name} className="w-16 h-16 rounded-2xl object-cover border-4 border-white shadow-lg" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-inner ${child.checkedIn ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                                      <Baby className="w-8 h-8" />
+                                    </div>
                                   )}
+                                  <div>
+                                    <h4 className="font-black text-xl text-slate-900 tracking-tight leading-tight">{child.name}</h4>
+                                    <p className="text-sm font-medium text-slate-500 mt-1">{parent?.name || 'Responsável não cadastrado'}</p>
+                                    {child.checkedIn && child.lastCheckIn && (
+                                      <div className="text-[10px] text-green-600 font-black uppercase tracking-widest mt-3 flex items-center gap-2 bg-green-100/50 w-fit px-3 py-1 rounded-full">
+                                        <Clock className="w-3 h-3" />
+                                        Entrou às {format(new Date(child.lastCheckIn), 'HH:mm')}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex flex-col gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant={child.checkedIn ? "destructive" : "default"}
-                                  className={`rounded-xl font-bold h-9 ${!child.checkedIn ? 'aljava-gradient' : ''}`}
-                                  onClick={() => handleCheckIn(child.id!, true)}
-                                >
-                                  {child.checkedIn ? 'Check-out' : 'Check-in'}
-                                </Button>
-                                {child.checkedIn && (
+                                <div className="flex flex-col gap-3">
                                   <Button 
                                     size="sm" 
-                                    variant="outline" 
-                                    className="rounded-xl h-9 border-green-200 text-green-600 hover:bg-green-50"
-                                    onClick={() => finalizarCheckinECompartilhar(`entry-card-${child.id}`, child.name)}
+                                    variant={child.checkedIn ? "destructive" : "default"}
+                                    className={`rounded-xl font-black uppercase tracking-widest text-[10px] h-10 px-6 ${!child.checkedIn ? 'aljava-gradient shadow-lg shadow-primary/20' : 'shadow-lg shadow-red-500/20'}`}
+                                    onClick={() => handleCheckIn(child.id!, true)}
                                   >
-                                    <Share2 className="w-3 h-3 mr-2" />
-                                    Comprovante
+                                    {child.checkedIn ? 'Check-out' : 'Check-in'}
                                   </Button>
-                                )}
-                                <Dialog>
-                                  <DialogTrigger 
-                                    render={
+                                  {child.checkedIn && (
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="rounded-xl h-10 border-green-200 text-green-600 hover:bg-green-50 font-black uppercase tracking-widest text-[10px]"
+                                      onClick={() => finalizarCheckinECompartilhar(`entry-card-${child.id}`, child.name)}
+                                    >
+                                      <Share2 className="w-4 h-4 mr-2" />
+                                      Comprovante
+                                    </Button>
+                                  )}
+                                  <Dialog>
+                                    <DialogTrigger asChild>
                                       <Button 
                                         size="sm" 
                                         variant="outline" 
@@ -2121,9 +2307,8 @@ export default function App() {
                                         <QrCode className="w-3 h-3 mr-2" />
                                         Cartão
                                       </Button>
-                                    }
-                                  />
-                                  <DialogContent className="max-w-sm rounded-[2.5rem] p-0 max-h-[90vh] overflow-y-auto border-none shadow-2xl scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-sm rounded-[2.5rem] p-0 max-h-[90vh] overflow-y-auto border-none shadow-2xl scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                                     <div id={`entry-card-${child.id}`} className="bg-white">
                                       <div className="aljava-gradient p-8 text-white text-center">
                                         <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
@@ -2161,11 +2346,11 @@ export default function App() {
                                           <Share2 className="w-4 h-4" />
                                           Compartilhar
                                         </Button>
-                                        <DialogClose render={
+                                        <DialogClose asChild>
                                           <Button variant="ghost" className="flex-1 h-12 rounded-xl text-slate-400 font-bold">
                                             Fechar
                                           </Button>
-                                        } />
+                                        </DialogClose>
                                       </div>
                                     </div>
                                   </DialogContent>
@@ -2174,8 +2359,10 @@ export default function App() {
                             </div>
                           </CardContent>
                         </Card>
-                      );
-                    })}
+                      </motion.div>
+                    );
+                  })}
+
                   {children.filter(child => {
                     const search = checkinSearch.toLowerCase();
                     const parent = parents.find(p => (child.familyId && p.familyId === child.familyId) || p.id === child.parentId);
@@ -2193,20 +2380,20 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="children" className="space-y-6">
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-[2rem] shadow-sm border border-slate-100">
-              <div className="relative w-full md:w-96">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <TabsContent value="children" className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex flex-col xl:flex-row gap-6 items-center justify-between bg-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+              <div className="relative w-full xl:w-[400px] group">
+                <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-primary transition-colors" />
                 <Input 
                   placeholder="Buscar flecha pelo nome..." 
-                  className="pl-11 h-12 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all"
+                  className="pl-14 h-16 rounded-2xl border-none bg-slate-50/50 focus:bg-white transition-all shadow-inner text-lg font-medium"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <div className="flex gap-2 w-full md:w-auto">
+              <div className="flex flex-wrap gap-4 w-full xl:w-auto">
                 <Select value={ageFilter} onValueChange={setAgeFilter}>
-                  <SelectTrigger className="w-full md:w-[180px] h-12 rounded-2xl border-slate-100">
+                  <SelectTrigger className="w-full sm:w-[200px] h-16 rounded-2xl border-none bg-slate-50/50 font-bold text-slate-600">
                     <SelectValue placeholder="Filtrar Turma" />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
@@ -2219,7 +2406,7 @@ export default function App() {
                 </Select>
 
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full md:w-[150px] h-12 rounded-2xl border-slate-100">
+                  <SelectTrigger className="w-full sm:w-[160px] h-16 rounded-2xl border-none bg-slate-50/50 font-bold text-slate-600">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl">
@@ -2231,74 +2418,74 @@ export default function App() {
                 </Select>
                 
                 {isAdmin && (
-                  <Button onClick={exportToExcel} variant="outline" className="h-12 rounded-2xl border-slate-200 hover:bg-slate-50">
-                    <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
-                    <span className="hidden sm:inline">Exportar</span>
+                  <Button onClick={exportToExcel} variant="outline" className="h-16 rounded-2xl border-slate-100 hover:bg-slate-50 px-6 font-bold text-slate-600">
+                    <FileSpreadsheet className="w-5 h-5 mr-3 text-green-600" />
+                    Exportar
                   </Button>
                 )}
               
               {isAdmin && (
-                <Button onClick={() => setIsChildDialogOpen(true)} className="h-12 rounded-2xl aljava-gradient px-6 shadow-lg shadow-primary/20">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nova Criança
+                <Button onClick={() => setIsChildDialogOpen(true)} className="h-16 rounded-2xl aljava-gradient px-8 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+                  <Plus className="w-5 h-5 mr-3" />
+                  Nova Flecha
                 </Button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
               {familyGroups.map((group, groupIdx) => {
                 const familyId = group.children[0].familyId || group.children[0].parentId || `group-${groupIdx}`;
                 return (
                   <motion.div layout key={familyId} className="space-y-4">
-                    <Card className="rounded-[2.5rem] overflow-hidden border-none shadow-xl shadow-slate-200/60 bg-white group hover:shadow-2xl transition-all duration-500">
-                      <div className="h-3 w-full bg-gradient-to-r from-primary via-primary/80 to-primary/60" />
+                    <Card className="bento-card overflow-hidden group hover:scale-[1.01] transition-all duration-500">
+                      <div className="h-2 w-full aljava-gradient" />
                       <CardHeader className="p-8 pb-4">
                         <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-[1.25rem] bg-primary/5 flex items-center justify-center text-primary">
-                              <Users className="w-7 h-7" />
+                          <div className="flex items-center gap-5">
+                            <div className="w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center text-primary shadow-inner group-hover:bg-primary group-hover:text-white transition-all duration-500">
+                              <Users className="w-8 h-8" />
                             </div>
                             <div>
-                              <CardTitle className="text-xl font-black text-slate-900 tracking-tight">
+                              <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">
                                 {group.familyName || `Família ${group.parents[0]?.name.split(' ').pop() || 'Sem Nome'}`}
                               </CardTitle>
-                              <CardDescription className="font-medium text-slate-500">
+                              <CardDescription className="font-bold text-slate-500 mt-1">
                                 {group.children.length} {group.children.length === 1 ? 'Flecha' : 'Flechas'} • {group.parents.length} {group.parents.length === 1 ? 'Responsável' : 'Responsáveis'}
                               </CardDescription>
                             </div>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="p-8 pt-0 space-y-8">
+                      <CardContent className="p-8 pt-0 space-y-10">
                         {/* Children Section */}
-                        <div className="space-y-4">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                            <Baby className="w-3 h-3" /> Flechas
+                        <div className="space-y-5">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary" /> Flechas
                           </h4>
-                          <div className="grid grid-cols-1 gap-3">
+                          <div className="grid grid-cols-1 gap-4">
                             {group.children.map(child => {
                               const ageGroup = getAgeGroup(child.birthDate);
                               return (
-                                <div key={child.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 group/item hover:bg-white hover:shadow-md transition-all">
-                                  <div className="flex items-center gap-3">
+                                <div key={child.id} className="flex items-center justify-between p-5 bg-slate-50/50 rounded-2xl border border-slate-100 group/item hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all">
+                                  <div className="flex items-center gap-4">
                                     {child.photoUrl ? (
-                                      <img src={child.photoUrl} alt={child.name} className="w-10 h-10 rounded-xl object-cover border border-slate-100" referrerPolicy="no-referrer" />
+                                      <img src={child.photoUrl} alt={child.name} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-md" referrerPolicy="no-referrer" />
                                     ) : (
-                                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-inner ${
                                         child.status === 'Inativa' ? 'bg-slate-100 text-slate-400' : 'bg-primary/10 text-primary'
                                       }`}>
-                                        <Baby className="w-5 h-5" />
+                                        <Baby className="w-6 h-6" />
                                       </div>
                                     )}
                                     <div>
-                                      <p className="font-bold text-slate-900">{child.name}</p>
-                                      <div className="flex items-center gap-2 mt-0.5">
-                                        <Badge variant="secondary" className="text-[9px] font-black uppercase bg-white text-slate-500 border-slate-100">
+                                      <p className="font-black text-slate-900 text-lg tracking-tight">{child.name}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-widest bg-white text-slate-500 border-slate-100">
                                           {ageGroup.label} • {ageGroup.age} anos
                                         </Badge>
                                         {child.status && child.status !== 'Ativa' && (
-                                          <Badge className={`text-[9px] font-black uppercase ${
+                                          <Badge className={`text-[9px] font-black uppercase tracking-widest ${
                                             child.status === 'Inativa' ? 'bg-slate-100 text-slate-500' : 'bg-amber-100 text-amber-600'
                                           }`}>
                                             {child.status}
@@ -2308,21 +2495,21 @@ export default function App() {
                                     </div>
                                   </div>
                                   {isAdmin && (
-                                    <div className="flex gap-1 transition-opacity">
+                                    <div className="flex gap-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
                                       <Button 
                                         size="icon" 
                                         variant="ghost" 
-                                        className={`h-8 w-8 rounded-lg ${child.status === 'Inativa' ? 'text-green-500 hover:bg-green-50' : 'text-amber-500 hover:bg-amber-50'}`} 
+                                        className={`h-10 w-10 rounded-xl ${child.status === 'Inativa' ? 'text-green-500 hover:bg-green-50' : 'text-amber-500 hover:bg-amber-50'}`} 
                                         onClick={() => toggleChildStatus(child)}
                                         title={child.status === 'Inativa' ? "Ativar" : "Desativar"}
                                       >
-                                        {child.status === 'Inativa' ? <UserPlus className="w-4 h-4" /> : <UserMinus className="w-4 h-4" />}
+                                        {child.status === 'Inativa' ? <UserPlus className="w-5 h-5" /> : <UserMinus className="w-5 h-5" />}
                                       </Button>
-                                      <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-blue-500 hover:bg-blue-50" onClick={() => handleEditChild(child)}>
-                                        <Pencil className="w-4 h-4" />
+                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-blue-500 hover:bg-blue-50" onClick={() => handleEditChild(child)}>
+                                        <Pencil className="w-5 h-5" />
                                       </Button>
-                                      <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-red-500 hover:bg-red-50" onClick={() => handleDeleteChild(child)}>
-                                        <Trash2 className="w-4 h-4" />
+                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-red-500 hover:bg-red-50" onClick={() => handleDeleteChild(child)}>
+                                        <Trash2 className="w-5 h-5" />
                                       </Button>
                                     </div>
                                   )}
@@ -2333,52 +2520,52 @@ export default function App() {
                         </div>
 
                         {/* Parents Section */}
-                        <div className="space-y-4">
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                            <ShieldCheck className="w-3 h-3" /> Responsáveis
+                        <div className="space-y-5">
+                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary" /> Responsáveis
                           </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             {group.parents.map(parent => (
-                              <div key={parent.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                              <div key={parent.id} className="p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm space-y-4 hover:shadow-md transition-shadow">
                                 <div className="flex justify-between items-start">
-                                  <div className="flex gap-3">
+                                  <div className="flex gap-4">
                                     {parent.photoUrl ? (
-                                      <img src={parent.photoUrl} alt={parent.name} className="w-10 h-10 rounded-xl object-cover border border-slate-100" referrerPolicy="no-referrer" />
+                                      <img src={parent.photoUrl} alt={parent.name} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-md" referrerPolicy="no-referrer" />
                                     ) : (
-                                      <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
-                                        <ShieldCheck className="w-5 h-5" />
+                                      <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 shadow-inner">
+                                        <ShieldCheck className="w-6 h-6" />
                                       </div>
                                     )}
                                     <div>
-                                      <p className="font-bold text-slate-900 text-sm">{parent.name}</p>
-                                      <p className="text-[10px] font-medium text-slate-500">{parent.relation} • Líder: {parent.leader || '---'}</p>
+                                      <p className="font-black text-slate-900 text-base leading-tight">{parent.name}</p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{parent.relation} • Líder: {parent.leader || '---'}</p>
                                     </div>
                                   </div>
-                                  <div className="flex gap-1">
+                                  <div className="flex gap-2">
                                     {group.children.some(c => c.status === 'Inativa') && (
                                       <Button 
                                         size="icon" 
                                         variant="ghost" 
-                                        className="h-8 w-8 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-100"
+                                        className="h-10 w-10 rounded-full bg-amber-50 text-amber-600 hover:bg-amber-100"
                                         onClick={() => sendAbsenceMessage(group.children[0], parent)}
                                         title="Mensagem de Ausência"
                                       >
-                                        <MessageCircle className="w-4 h-4" />
+                                        <MessageCircle className="w-5 h-5" />
                                       </Button>
                                     )}
                                     <Button 
                                       size="icon" 
                                       variant="ghost" 
-                                      className="h-8 w-8 rounded-full bg-green-50 text-green-600 hover:bg-green-100"
+                                      className="h-10 w-10 rounded-full bg-green-50 text-green-600 hover:bg-green-100"
                                       onClick={() => contactParent(group.children[0], parent)}
                                       title="Contato Rápido"
                                     >
-                                      <MessageCircle className="w-4 h-4" />
+                                      <MessageCircle className="w-5 h-5" />
                                     </Button>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-50 p-2 rounded-xl">
-                                  <Phone className="w-3 h-3 text-slate-400" />
+                                <div className="flex items-center gap-3 text-sm font-black text-slate-600 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                                  <Phone className="w-4 h-4 text-slate-400" />
                                   {parent.phone}
                                 </div>
                               </div>
@@ -2387,19 +2574,19 @@ export default function App() {
                         </div>
 
                         {(group.children.some(c => c.allergies || c.specialNeeds)) && (
-                          <div className="pt-4 border-t border-slate-50 space-y-3">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Observações de Saúde/Atenção</h4>
-                            <div className="grid grid-cols-1 gap-2">
+                          <div className="pt-8 border-t border-slate-50 space-y-4">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Observações de Saúde</h4>
+                            <div className="grid grid-cols-1 gap-3">
                               {group.children.filter(c => c.allergies).map(c => (
-                                <div key={`alg-${c.id}`} className="flex items-start gap-2 text-[11px] bg-red-50 text-red-700 p-3 rounded-2xl border border-red-100">
-                                  <AlertCircle className="w-4 h-4 shrink-0" />
-                                  <span><b>{c.name}:</b> {c.allergies}</span>
+                                <div key={`alg-${c.id}`} className="flex items-start gap-3 text-xs bg-red-50/50 text-red-700 p-4 rounded-2xl border border-red-100 font-medium">
+                                  <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+                                  <span><b className="font-black uppercase tracking-widest text-[10px] block mb-1">{c.name}</b> {c.allergies}</span>
                                 </div>
                               ))}
                               {group.children.filter(c => c.specialNeeds).map(c => (
-                                <div key={`sn-${c.id}`} className="flex items-start gap-2 text-[11px] bg-amber-50 text-amber-700 p-3 rounded-2xl border border-amber-100">
-                                  <Info className="w-4 h-4 shrink-0" />
-                                  <span><b>{c.name}:</b> {c.specialNeeds}</span>
+                                <div key={`sn-${c.id}`} className="flex items-start gap-3 text-xs bg-amber-50/50 text-amber-700 p-4 rounded-2xl border border-amber-100 font-medium">
+                                  <Info className="w-5 h-5 shrink-0 text-amber-500" />
+                                  <span><b className="font-black uppercase tracking-widest text-[10px] block mb-1">{c.name}</b> {c.specialNeeds}</span>
                                 </div>
                               ))}
                             </div>
@@ -2420,44 +2607,45 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="birthdays" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <Card className="lg:col-span-2 rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-                <CardHeader className="bg-pink-50/50 border-b border-pink-100">
-                  <div className="flex items-center justify-between">
+          <TabsContent value="birthdays" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+              <Card className="lg:col-span-2 bento-card overflow-hidden border-none shadow-2xl shadow-slate-200/50 bg-white">
+                <CardHeader className="p-10 bg-pink-50/30 border-b border-pink-50">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                     <div>
-                      <CardTitle className="flex items-center gap-2 text-pink-700">
-                        <Cake className="w-5 h-5" />
+                      <CardTitle className="flex items-center gap-3 text-3xl font-black text-pink-700 tracking-tight">
+                        <div className="w-12 h-12 bg-pink-100 rounded-2xl flex items-center justify-center text-pink-600 shadow-inner">
+                          <Cake className="w-7 h-7" />
+                        </div>
                         Aniversariantes de {format(new Date(), 'MMMM', { locale: ptBR })}
                       </CardTitle>
-                      <CardDescription className="text-pink-600/70">Crianças que celebram a vida este mês</CardDescription>
+                      <CardDescription className="text-pink-600/70 font-medium mt-2 ml-15">Crianças que celebram a vida este mês</CardDescription>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4 self-end md:self-center">
                       {isAdmin && (
                         <Button 
                           variant="outline" 
-                          size="sm"
-                          className="rounded-xl border-pink-200 text-pink-700 hover:bg-pink-100"
+                          className="h-12 rounded-2xl border-pink-200 text-pink-700 hover:bg-pink-100 font-bold px-6"
                           onClick={sendDailySummaryToAdmin}
                         >
-                          <MessageCircle className="w-4 h-4 mr-2" />
-                          Resumo do Dia (Meu WhatsApp)
+                          <MessageCircle className="w-5 h-5 mr-3" />
+                          Resumo do Dia
                         </Button>
                       )}
-                      <div className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-sm font-bold">
+                      <Badge className="rounded-full px-6 py-2 bg-pink-100 text-pink-700 border-none font-black uppercase tracking-widest text-[10px]">
                         {children.filter(child => {
                           const parts = child.birthDate.split('-');
                           if (parts.length !== 3) return false;
                           const month = parseInt(parts[1], 10) - 1;
                           return month === new Date().getMonth();
                         }).length} Flechas
-                      </div>
+                      </Badge>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[550px]">
-                    <div className="p-6 space-y-4">
+                  <ScrollArea className="h-[600px]">
+                    <div className="p-10 space-y-6">
                       {children
                         .filter(child => {
                           const parts = child.birthDate.split('-');
@@ -2481,42 +2669,48 @@ export default function App() {
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               key={child.id} 
-                              className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border transition-all ${
+                              className={`flex flex-col md:flex-row items-start md:items-center justify-between p-6 rounded-[2rem] border transition-all duration-500 gap-6 ${
                                 isToday 
-                                ? 'bg-pink-50 border-pink-200 shadow-sm ring-1 ring-pink-200' 
-                                : 'bg-white border-slate-100 hover:border-slate-200'
+                                ? 'bg-pink-50/50 border-pink-200 shadow-xl shadow-pink-200/20 ring-1 ring-pink-200' 
+                                : 'bg-white border-slate-50 hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/40'
                               }`}
                             >
-                              <div className="flex items-center gap-4 mb-4 sm:mb-0">
-                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center relative ${
-                                  isToday ? 'bg-pink-200 text-pink-600' : 'bg-slate-100 text-slate-500'
+                              <div className="flex items-center gap-6">
+                                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center relative shadow-inner ${
+                                  isToday ? 'bg-pink-200 text-pink-600' : 'bg-slate-50 text-slate-400'
                                 }`}>
-                                  <Baby className="w-7 h-7" />
+                                  <Baby className="w-8 h-8" />
                                   {isToday && (
-                                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
                                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-pink-500"></span>
+                                      <span className="relative inline-flex rounded-full h-4 w-4 bg-pink-500"></span>
                                     </span>
                                   )}
                                 </div>
                                 <div>
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-bold text-slate-900 text-lg">{child.name}</p>
-                                    {isToday && <Badge className="bg-pink-500 hover:bg-pink-600">HOJE! 🎂</Badge>}
+                                  <div className="flex items-center gap-3">
+                                    <p className="font-black text-xl text-slate-900 tracking-tight">{child.name}</p>
+                                    {isToday && <Badge className="bg-pink-500 hover:bg-pink-600 font-black uppercase tracking-widest text-[9px] px-3 py-1">HOJE! 🎂</Badge>}
                                   </div>
-                                  <p className="text-sm text-slate-500 flex items-center gap-2">
-                                    <Clock className="w-3 h-3" />
-                                    Dia {parseInt(child.birthDate.split('-')[2], 10)} • {getAgeGroup(child.birthDate).label}
-                                  </p>
+                                  <div className="flex items-center gap-3 mt-2">
+                                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+                                      <Calendar className="w-3 h-3" />
+                                      Dia {parseInt(child.birthDate.split('-')[2], 10)}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+                                      <Clock className="w-3 h-3" />
+                                      {getAgeGroup(child.birthDate).label}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="flex w-full sm:w-auto gap-2">
+                              <div className="flex w-full md:w-auto gap-3 self-end md:self-center">
                                 {parent && (
                                   <Button 
-                                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 rounded-xl h-11 px-6 shadow-sm shadow-green-100"
+                                    className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 rounded-2xl h-14 px-8 shadow-xl shadow-green-200 font-black uppercase tracking-widest text-[10px]"
                                     onClick={() => sendBirthdayMessage(child, parent)}
                                   >
-                                    <MessageCircle className="w-4 h-4 mr-2" />
+                                    <MessageCircle className="w-5 h-5 mr-3" />
                                     Enviar Parabéns
                                   </Button>
                                 )}
@@ -2524,12 +2718,18 @@ export default function App() {
                             </motion.div>
                           );
                         })}
-                      {children.filter(child => new Date(child.birthDate).getMonth() === new Date().getMonth()).length === 0 && (
-                        <div className="text-center py-20">
-                          <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Cake className="w-10 h-10 text-slate-300" />
+                      {children.filter(child => {
+                        const parts = child.birthDate.split('-');
+                        if (parts.length !== 3) return false;
+                        const month = parseInt(parts[1], 10) - 1;
+                        return month === new Date().getMonth();
+                      }).length === 0 && (
+                        <div className="text-center py-32">
+                          <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8">
+                            <Cake className="w-12 h-12 text-slate-200" />
                           </div>
-                          <p className="text-slate-400 font-medium">Nenhum aniversariante este mês.</p>
+                          <p className="text-slate-400 font-bold text-xl">Nenhum aniversariante este mês.</p>
+                          <p className="text-slate-300 mt-2">As celebrações aparecerão aqui quando chegar o mês.</p>
                         </div>
                       )}
                     </div>
@@ -2537,15 +2737,18 @@ export default function App() {
                 </CardContent>
               </Card>
 
-              <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-                <CardHeader className="bg-slate-50 border-b border-slate-100">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <LayoutDashboard className="w-4 h-4 text-slate-400" />
-                    Quadro Geral
-                  </CardTitle>
-                  <CardDescription>Todos os aniversariantes do ano</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
+              <div className="space-y-8">
+                <Card className="bento-card overflow-hidden border-none shadow-2xl shadow-slate-200/50 bg-white">
+                  <CardHeader className="p-8 bg-slate-50/50 border-b border-slate-50">
+                    <CardTitle className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-3">
+                      <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100">
+                        <LayoutDashboard className="w-4 h-4 text-primary" />
+                      </div>
+                      Quadro Geral
+                    </CardTitle>
+                    <CardDescription className="font-medium text-slate-500 ml-11">Todos os aniversariantes do ano</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
                   <ScrollArea className="h-[550px]">
                     <div className="p-6 space-y-8">
                       {Array.from({ length: 12 }).map((_, i) => {
@@ -2591,46 +2794,49 @@ export default function App() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
+          </div>
+        </TabsContent>
 
-          <TabsContent value="services" className="space-y-8">
-            <div className="flex justify-between items-center">
+          <TabsContent value="services" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
               <div>
-                <h2 className="text-3xl font-black text-slate-900">Cultos & Redes</h2>
-                <p className="text-slate-500">Organização e cronograma dos cultos da igreja</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">Cultos & Redes</h2>
+                <p className="text-slate-500 font-medium mt-1">Organização e cronograma dos cultos da igreja</p>
               </div>
               <Dialog open={isServiceDialogOpen} onOpenChange={setIsServiceDialogOpen}>
                 <DialogTrigger render={
-                  <Button className="h-12 rounded-2xl aljava-gradient px-8 shadow-lg shadow-primary/20 font-bold">
-                    <Plus className="w-5 h-5 mr-2" />
+                  <Button className="h-14 rounded-2xl aljava-gradient px-8 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+                    <Plus className="w-5 h-5 mr-3" />
                     Agendar Culto
                   </Button>
                 } />
-                <DialogContent className="max-w-2xl rounded-[2.5rem] border-none shadow-2xl p-0 overflow-hidden">
-                  <div className="bg-primary p-8 text-white">
+                <DialogContent className="max-w-4xl rounded-[2.5rem] border-none shadow-2xl p-0 overflow-hidden">
+                  <div className="bg-primary p-10 text-white relative overflow-hidden">
+                    <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
                     <DialogHeader>
-                      <DialogTitle className="text-2xl font-bold text-white">Novo Culto/Rede</DialogTitle>
+                      <DialogTitle className="text-3xl font-black text-white tracking-tight">Novo Culto/Rede</DialogTitle>
+                      <CardDescription className="text-white/70 font-medium">Planeje o próximo encontro do ministério</CardDescription>
                     </DialogHeader>
                   </div>
                   <ScrollArea className="max-h-[80vh]">
-                    <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <form onSubmit={addService} className="space-y-6">
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Nome do Culto</Label>
-                          <Input name="name" placeholder="Ex: Culto de Celebração" required className="h-12 rounded-xl" />
+                    <div className="p-10 grid grid-cols-1 lg:grid-cols-2 gap-10">
+                      <form onSubmit={addService} className="space-y-8">
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Nome do Culto</Label>
+                          <Input name="name" placeholder="Ex: Culto de Celebração" required className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Data</Label>
-                            <Input type="date" name="date" required className="h-12 rounded-xl" />
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Data</Label>
+                            <Input type="date" name="date" required className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                           </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tipo</Label>
+                          <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Tipo</Label>
                             <Select name="type" required defaultValue="Culto">
-                              <SelectTrigger className="h-12 rounded-xl">
+                              <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
                                 <SelectValue placeholder="Tipo" />
                               </SelectTrigger>
-                              <SelectContent className="rounded-xl">
+                              <SelectContent className="rounded-2xl border-none shadow-2xl">
                                 <SelectItem value="Culto">Culto</SelectItem>
                                 <SelectItem value="Rede">Rede</SelectItem>
                                 <SelectItem value="Evento">Evento</SelectItem>
@@ -2638,24 +2844,24 @@ export default function App() {
                             </Select>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tema</Label>
-                          <Input name="theme" placeholder="Ex: O Poder da Oração" className="h-12 rounded-xl" />
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Tema</Label>
+                          <Input name="theme" placeholder="Ex: O Poder da Oração" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Estudo/Esboço (Para Download)</Label>
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Estudo/Esboço (Para Download)</Label>
                           <textarea 
                             name="studyContent" 
                             placeholder="Cole aqui o esboço da mensagem..." 
-                            className="w-full min-h-[150px] p-4 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                            className="w-full min-h-[150px] p-6 rounded-2xl border border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner text-sm outline-none font-medium"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Arquivo da Aula (PDF, Imagem, etc.)</Label>
-                          <div className="flex items-center gap-2">
-                            <label className="flex-1 h-12 rounded-xl border-2 border-dashed border-slate-200 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer flex items-center justify-center gap-2 text-sm text-slate-500 overflow-hidden px-4">
-                              <Upload className="w-4 h-4 shrink-0" />
-                              <span className="truncate">{selectedFile ? selectedFile.name : 'Clique para selecionar'}</span>
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Arquivo da Aula (PDF, Imagem, etc.)</Label>
+                          <div className="flex items-center gap-3">
+                            <label className="flex-1 h-14 rounded-2xl border-2 border-dashed border-slate-200 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer flex items-center justify-center gap-3 text-sm text-slate-500 overflow-hidden px-6">
+                              <Upload className="w-5 h-5 shrink-0" />
+                              <span className="truncate font-bold">{selectedFile ? selectedFile.name : 'Clique para selecionar'}</span>
                               <input 
                                 type="file" 
                                 className="hidden" 
@@ -2668,46 +2874,48 @@ export default function App() {
                                 variant="ghost" 
                                 size="icon" 
                                 onClick={() => setSelectedFile(null)}
-                                className="text-red-500 hover:bg-red-50"
+                                className="h-14 w-14 rounded-2xl text-red-500 hover:bg-red-50"
                               >
-                                <X className="w-4 h-4" />
+                                <X className="w-5 h-5" />
                               </Button>
                             )}
                           </div>
                         </div>
-                        <DialogFooter>
-                          <Button type="submit" disabled={isUploading} className="w-full h-12 rounded-xl aljava-gradient font-bold">
-                            {isUploading ? <Sparkles className="w-4 h-4 animate-spin mr-2" /> : null}
+                        <DialogFooter className="pt-4">
+                          <Button type="submit" disabled={isUploading} className="w-full h-16 rounded-2xl aljava-gradient shadow-xl shadow-primary/20 font-black uppercase tracking-widest">
+                            {isUploading ? <Sparkles className="w-5 h-5 animate-spin mr-3" /> : null}
                             {isUploading ? 'Enviando...' : 'Agendar e Salvar'}
                           </Button>
                         </DialogFooter>
                       </form>
 
-                      <div className="space-y-6 bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="w-5 h-5 text-primary" />
-                            <h3 className="font-bold text-slate-900">IA: Auxílio Pastoral</h3>
+                      <div className="space-y-8 bg-slate-50/50 p-8 rounded-[2rem] border border-slate-100 shadow-inner">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                              <Sparkles className="w-6 h-6" />
+                            </div>
+                            <h3 className="font-black text-slate-900 tracking-tight uppercase text-xs tracking-[0.2em]">IA: Auxílio Pastoral</h3>
                           </div>
                         </div>
-                        <div className="space-y-4">
-                          <div className="flex gap-2">
+                        <div className="space-y-6">
+                          <div className="flex gap-3">
                             <Input 
                               placeholder="Palavra-chave ou versículo..." 
-                              className="rounded-xl"
+                              className="h-14 rounded-2xl border-slate-100 bg-white focus:bg-white transition-all shadow-sm font-medium"
                               value={serviceAiPrompt}
                               onChange={(e) => setServiceAiPrompt(e.target.value)}
                             />
-                            <div className="flex gap-1">
+                            <div className="flex gap-2">
                               <Button 
                                 type="button"
                                 onClick={generateServiceTheme}
                                 disabled={isServiceAiGenerating || isServiceStudyAiGenerating}
                                 title="Sugerir Temas"
                                 variant="secondary"
-                                className="rounded-xl shrink-0"
+                                className="h-14 w-14 rounded-2xl shrink-0 bg-white shadow-sm hover:bg-primary hover:text-white transition-all duration-300"
                               >
-                                {isServiceAiGenerating ? <Sparkles className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                {isServiceAiGenerating ? <Sparkles className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
                               </Button>
                               <Button 
                                 type="button"
@@ -2715,30 +2923,38 @@ export default function App() {
                                 disabled={isServiceAiGenerating || isServiceStudyAiGenerating}
                                 title="Gerar Estudo Completo"
                                 variant="outline"
-                                className="rounded-xl shrink-0 border-primary/20 text-primary hover:bg-primary/5"
+                                className="h-14 w-14 rounded-2xl shrink-0 bg-white shadow-sm border-primary/20 text-primary hover:bg-primary hover:text-white transition-all duration-300"
                               >
-                                {isServiceStudyAiGenerating ? <Sparkles className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}
+                                {isServiceStudyAiGenerating ? <Sparkles className="w-5 h-5 animate-spin" /> : <BookOpen className="w-5 h-5" />}
                               </Button>
                             </div>
                           </div>
 
                           {serviceAiResponse && (
-                            <div className="space-y-2">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Sugestões de Temas</p>
-                              <div className="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 max-h-[200px] overflow-y-auto shadow-sm prose prose-slate prose-xs">
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="space-y-3"
+                            >
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Sugestões de Temas</p>
+                              <div className="p-6 bg-white rounded-2xl border border-slate-100 text-sm text-slate-600 max-h-[200px] overflow-y-auto shadow-sm prose prose-slate prose-xs">
                                 <ReactMarkdown>{serviceAiResponse}</ReactMarkdown>
                               </div>
-                            </div>
+                            </motion.div>
                           )}
 
                           {serviceStudyAiResponse && (
-                            <div className="space-y-2">
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="space-y-3"
+                            >
                               <div className="flex items-center justify-between ml-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Esboço do Estudo</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Esboço do Estudo</p>
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
-                                  className="h-6 text-[10px] text-primary"
+                                  className="h-8 px-3 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 rounded-full"
                                   onClick={() => {
                                     const textarea = document.querySelector('textarea[name="studyContent"]') as HTMLTextAreaElement;
                                     if (textarea) {
@@ -2756,7 +2972,7 @@ export default function App() {
                               <div className="p-4 bg-white rounded-xl border border-slate-200 text-xs text-slate-600 max-h-[200px] overflow-y-auto shadow-sm prose prose-slate prose-xs">
                                 <ReactMarkdown>{serviceStudyAiResponse}</ReactMarkdown>
                               </div>
-                            </div>
+                            </motion.div>
                           )}
 
                           {!serviceAiResponse && !serviceStudyAiResponse && (
@@ -2859,83 +3075,88 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="volunteers" className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <TabsContent value="volunteers" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
               {/* Cadastro de Voluntários */}
-              <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
-                <div className="p-8 aljava-gradient text-white">
-                  <h2 className="text-2xl font-bold flex items-center gap-2">
-                    <UserPlus className="w-6 h-6" />
-                    Novo Voluntário
-                  </h2>
-                  <p className="text-white/70 text-sm mt-1">Cadastre quem serve no ministério</p>
-                </div>
-                <CardContent className="p-8">
-                  <form onSubmit={addVolunteer} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="vol-name" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome Completo</Label>
-                      <Input id="vol-name" name="name" required placeholder="Ex: João Silva" className="h-12 rounded-xl border-slate-200" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vol-phone" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">WhatsApp</Label>
-                      <Input id="vol-phone" name="phone" required placeholder="(00) 00000-0000" className="h-12 rounded-xl border-slate-200" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vol-birthDate" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Data de Nascimento (DD/MM/AAAA)</Label>
-                      <Input id="vol-birthDate" name="birthDate" placeholder="Ex: 15/05/1990" className="h-12 rounded-xl border-slate-200" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="vol-role" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Função</Label>
-                      <Select name="role" required>
-                        <SelectTrigger className="h-12 rounded-xl border-slate-200">
-                          <SelectValue placeholder="Selecione a função" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl">
-                          <SelectItem value="Ministro">Ministro</SelectItem>
-                          <SelectItem value="Auxiliar">Auxiliar</SelectItem>
-                          <SelectItem value="Coordenador">Coordenador</SelectItem>
-                          <SelectItem value="Louvor">Louvor</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button type="submit" className="w-full h-12 rounded-xl aljava-gradient shadow-lg shadow-primary/20">
-                      Cadastrar Voluntário
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
+              <div className="lg:col-span-1 space-y-8">
+                <Card className="bento-card overflow-hidden">
+                  <div className="p-10 aljava-gradient text-white">
+                    <h2 className="text-3xl font-black flex items-center gap-3 tracking-tight">
+                      <UserPlus className="w-8 h-8" />
+                      Novo Voluntário
+                    </h2>
+                    <p className="text-white/70 font-medium mt-2">Cadastre quem serve no ministério</p>
+                  </div>
+                  <CardContent className="p-10">
+                    <form onSubmit={addVolunteer} className="space-y-8">
+                      <div className="space-y-3">
+                        <Label htmlFor="vol-name" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Nome Completo</Label>
+                        <Input id="vol-name" name="name" required placeholder="Ex: João Silva" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
+                      </div>
+                      <div className="space-y-3">
+                        <Label htmlFor="vol-phone" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">WhatsApp</Label>
+                        <Input id="vol-phone" name="phone" required placeholder="(00) 00000-0000" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
+                      </div>
+                      <div className="space-y-3">
+                        <Label htmlFor="vol-birthDate" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Data de Nascimento (DD/MM/AAAA)</Label>
+                        <Input id="vol-birthDate" name="birthDate" placeholder="Ex: 15/05/1990" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
+                      </div>
+                      <div className="space-y-3">
+                        <Label htmlFor="vol-role" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Função</Label>
+                        <Select name="role" required>
+                          <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
+                            <SelectValue placeholder="Selecione a função" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-2xl border-none shadow-2xl">
+                            <SelectItem value="Ministro">Ministro</SelectItem>
+                            <SelectItem value="Auxiliar">Auxiliar</SelectItem>
+                            <SelectItem value="Coordenador">Coordenador</SelectItem>
+                            <SelectItem value="Louvor">Louvor</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button type="submit" className="w-full h-16 rounded-2xl aljava-gradient shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+                        Cadastrar Voluntário
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* Lista de Voluntários */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-slate-900">Equipe {appSettings.appName}</h2>
-                  <Badge variant="secondary" className="rounded-full px-4 py-1 bg-primary/5 text-primary border-none font-bold">
+              <div className="lg:col-span-2 space-y-8">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+                  <div>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight">Equipe {appSettings.appName}</h2>
+                    <p className="text-slate-500 font-medium mt-1">Nossos servos dedicados</p>
+                  </div>
+                  <Badge variant="secondary" className="rounded-full px-6 py-2 bg-primary/5 text-primary border-none font-black uppercase tracking-widest text-[10px]">
                     {volunteers.length} Voluntários
                   </Badge>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {volunteers.map(volunteer => (
-                    <Card key={volunteer.id} className="rounded-3xl border-none shadow-lg shadow-slate-200/50 bg-white group overflow-hidden">
-                      <CardHeader className="p-6 pb-2">
+                    <Card key={volunteer.id} className="bento-card group overflow-hidden border-none shadow-xl shadow-slate-200/50 bg-white hover:shadow-2xl transition-all duration-500">
+                      <CardHeader className="p-8 pb-4">
                         <div className="flex justify-between items-start">
-                          <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
-                            <UserCheck className="w-5 h-5" />
+                          <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all duration-500 shadow-inner">
+                            <UserCheck className="w-7 h-7" />
                           </div>
-                          <div className="flex gap-1">
+                          <div className="flex gap-2">
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              className="text-green-500 hover:text-green-600 rounded-lg"
+                              className="h-10 w-10 rounded-xl text-green-500 hover:bg-green-50"
                               onClick={() => contactVolunteer(volunteer)}
                               title="Enviar WhatsApp"
                             >
-                              <MessageCircle className="w-4 h-4" />
+                              <MessageCircle className="w-5 h-5" />
                             </Button>
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              className="text-blue-400 hover:text-blue-600 rounded-lg"
+                              className="h-10 w-10 rounded-xl text-blue-500 hover:bg-blue-50"
                               onClick={() => handleEditVolunteer(volunteer)}
                             >
                               <Pencil className="w-4 h-4" />
@@ -2943,20 +3164,22 @@ export default function App() {
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              className="text-red-400 hover:text-red-600 rounded-lg"
+                              className="h-10 w-10 rounded-xl text-red-500 hover:bg-red-50"
                               onClick={() => deleteVolunteer(volunteer.id!)}
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </div>
-                        <CardTitle className="text-lg font-bold mt-4">{volunteer.name}</CardTitle>
-                        <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{volunteer.role}</p>
+                        <CardTitle className="text-2xl font-black text-slate-900 tracking-tight mt-6">{volunteer.name}</CardTitle>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary mt-2">{volunteer.role}</p>
                       </CardHeader>
-                      <CardContent className="p-6 pt-4">
-                        <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <Phone className="w-4 h-4 text-green-500" />
-                          {volunteer.phone}
+                      <CardContent className="p-8 pt-4">
+                        <div className="flex items-center gap-4 text-slate-600 bg-slate-50/50 p-4 rounded-2xl border border-slate-100 group-hover:border-primary/20 transition-all">
+                          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                            <Phone className="w-5 h-5 text-green-500" />
+                          </div>
+                          <span className="font-bold text-lg">{volunteer.phone}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -2966,17 +3189,19 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="schedules" className="space-y-8">
-            <div className="grid grid-cols-1 gap-8">
+          <TabsContent value="schedules" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 gap-10">
               {/* Escala de Serviço */}
-              <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
-                <div className="p-8 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <Card className="bento-card overflow-hidden border-none shadow-2xl shadow-slate-200/50 bg-white">
+                <div className="p-10 border-b border-slate-50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 bg-slate-50/30">
                   <div>
-                    <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                      <CalendarDays className="w-6 h-6 text-primary" />
+                    <h2 className="text-3xl font-black text-slate-900 flex items-center gap-3 tracking-tight">
+                      <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-inner">
+                        <CalendarDays className="w-7 h-7" />
+                      </div>
                       Escala de Serviço
                     </h2>
-                    <p className="text-slate-500 text-sm">Organize os voluntários por turma e turno</p>
+                    <p className="text-slate-500 font-medium mt-2 ml-15">Organize os voluntários por turma e turno</p>
                   </div>
                   
                   <Dialog onOpenChange={(open) => {
@@ -2986,41 +3211,45 @@ export default function App() {
                     }
                   }}>
                     <DialogTrigger render={
-                      <Button className="rounded-xl aljava-gradient">
-                        <Plus className="w-4 h-4 mr-2" />
+                      <Button className="h-16 rounded-2xl aljava-gradient px-10 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+                        <Plus className="w-5 h-5 mr-3" />
                         Nova Escala
                       </Button>
                     } />
-                    <DialogContent className="rounded-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Agendar Escala</DialogTitle>
-                      </DialogHeader>
-                      <form onSubmit={addSchedule} className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>Data</Label>
-                          <Input type="date" name="date" required className="rounded-xl" />
+                    <DialogContent className="rounded-[2.5rem] border-none shadow-2xl p-0 overflow-hidden max-w-lg">
+                      <div className="bg-primary p-10 text-white relative overflow-hidden">
+                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+                        <DialogHeader>
+                          <DialogTitle className="text-3xl font-black text-white tracking-tight">Agendar Escala</DialogTitle>
+                          <CardDescription className="text-white/70 font-medium">Defina quem servirá no próximo culto</CardDescription>
+                        </DialogHeader>
+                      </div>
+                      <form onSubmit={addSchedule} className="p-10 space-y-8">
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Data do Culto</Label>
+                          <Input type="date" name="date" required className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                         </div>
-                        <div className="space-y-2">
-                          <Label>Voluntário</Label>
+                        <div className="space-y-3">
+                          <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Voluntário</Label>
                           <Select name="volunteerId" required>
-                            <SelectTrigger className="rounded-xl">
+                            <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
                               <SelectValue placeholder="Selecione o voluntário" />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl">
+                            <SelectContent className="rounded-2xl border-none shadow-2xl">
                               {volunteers.map(v => (
                                 <SelectItem key={v.id} value={v.id!}>{v.name} ({v.role})</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Turma</Label>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Turma</Label>
                             <Select name="groupId" required value={selectedGroupId} onValueChange={setSelectedGroupId}>
-                              <SelectTrigger className="rounded-xl">
+                              <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
                                 <SelectValue placeholder="Turma" />
                               </SelectTrigger>
-                              <SelectContent className="rounded-xl">
+                              <SelectContent className="rounded-2xl border-none shadow-2xl">
                                 <SelectItem value="G1">G1 (1-3 anos)</SelectItem>
                                 <SelectItem value="G2">G2 (4-5 anos)</SelectItem>
                                 <SelectItem value="G3">G3 (6-7 anos)</SelectItem>
@@ -3028,13 +3257,13 @@ export default function App() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="space-y-2">
-                            <Label>Turno</Label>
+                          <div className="space-y-3">
+                            <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Turno</Label>
                             <Select name="shift" required>
-                              <SelectTrigger className="rounded-xl">
+                              <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
                                 <SelectValue placeholder="Turno" />
                               </SelectTrigger>
-                              <SelectContent className="rounded-xl">
+                              <SelectContent className="rounded-2xl border-none shadow-2xl">
                                 <SelectItem value="Manhã">Manhã</SelectItem>
                                 <SelectItem value="Noite">Noite</SelectItem>
                               </SelectContent>
@@ -3042,20 +3271,20 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="space-y-4 border-t pt-4 mt-4">
+                        <div className="space-y-6 border-t border-slate-50 pt-8 mt-4">
                           <div className="flex items-center justify-between">
-                            <Label className="text-primary font-bold flex items-center gap-2">
+                            <Label className="text-primary font-black flex items-center gap-2 uppercase tracking-widest text-[10px]">
                               <Sparkles className="w-4 h-4" />
                               Ideias de Estudo (IA)
                             </Label>
-                            <Badge variant="outline" className="text-[10px] uppercase">Opcional</Badge>
+                            <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border-slate-200 text-slate-400">Opcional</Badge>
                           </div>
                           
-                          <div className="flex gap-2">
+                          <div className="flex gap-3">
                             <Input 
                               name="studyTheme"
                               placeholder="Tema ou Versículo..." 
-                              className="rounded-xl"
+                              className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium"
                               value={aiPrompt}
                               onChange={(e) => setAiPrompt(e.target.value)}
                             />
@@ -3064,21 +3293,25 @@ export default function App() {
                               onClick={generateStudyIdeas}
                               disabled={isGenerating}
                               variant="secondary"
-                              className="rounded-xl shrink-0"
+                              className="h-14 w-14 rounded-2xl shrink-0 bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all duration-300"
                             >
-                              {isGenerating ? <Sparkles className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                              {isGenerating ? <Sparkles className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
                             </Button>
                           </div>
 
                           {aiResponse && (
-                            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs text-slate-600 max-h-40 overflow-y-auto shadow-sm prose prose-slate prose-xs">
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="p-6 bg-slate-50/80 rounded-2xl border border-slate-100 text-sm text-slate-600 max-h-40 overflow-y-auto shadow-inner prose prose-slate prose-xs"
+                            >
                               <ReactMarkdown>{aiResponse}</ReactMarkdown>
-                            </div>
+                            </motion.div>
                           )}
                         </div>
 
                         <DialogFooter className="pt-4">
-                          <Button type="submit" className="w-full rounded-xl aljava-gradient">Salvar Escala</Button>
+                          <Button type="submit" className="w-full h-16 rounded-2xl aljava-gradient shadow-xl shadow-primary/20 font-black uppercase tracking-widest">Salvar Escala</Button>
                         </DialogFooter>
                       </form>
                     </DialogContent>
@@ -3086,61 +3319,67 @@ export default function App() {
                 </div>
                 
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[500px]">
-                    <div className="p-8 space-y-4">
+                  <ScrollArea className="h-[600px]">
+                    <div className="p-10 space-y-6">
                       {schedules.length === 0 ? (
-                        <div className="text-center py-20">
-                          <Calendar className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                          <p className="text-slate-400">Nenhuma escala agendada.</p>
+                        <div className="text-center py-32">
+                          <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-8">
+                            <Calendar className="w-12 h-12 text-slate-200" />
+                          </div>
+                          <p className="text-slate-400 font-bold text-xl">Nenhuma escala agendada.</p>
+                          <p className="text-slate-300 mt-2">As escalas aparecerão aqui quando forem criadas.</p>
                         </div>
                       ) : (
                         schedules.map(schedule => {
                           const volunteer = volunteers.find(v => v.id === schedule.volunteerId);
                           return (
-                            <div key={schedule.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group">
-                              <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-white flex flex-col items-center justify-center shadow-sm border border-slate-100">
-                                  <span className="text-[10px] font-bold text-primary uppercase leading-none">{format(new Date(schedule.date + 'T12:00:00'), 'MMM', { locale: ptBR })}</span>
-                                  <span className="text-lg font-black text-slate-900 leading-none">{format(new Date(schedule.date + 'T12:00:00'), 'dd')}</span>
+                            <div key={schedule.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-white rounded-[2rem] border border-slate-100 group hover:shadow-xl hover:shadow-slate-200/40 transition-all duration-500 gap-6">
+                              <div className="flex items-center gap-6">
+                                <div className="w-16 h-16 rounded-2xl bg-slate-50 flex flex-col items-center justify-center shadow-inner border border-slate-100 group-hover:bg-primary group-hover:text-white transition-colors duration-500">
+                                  <span className="text-[10px] font-black text-primary uppercase leading-none tracking-widest group-hover:text-white/80">{format(new Date(schedule.date + 'T12:00:00'), 'MMM', { locale: ptBR })}</span>
+                                  <span className="text-2xl font-black leading-none mt-1">{format(new Date(schedule.date + 'T12:00:00'), 'dd')}</span>
                                 </div>
                                 <div>
-                                  <p className="font-bold text-slate-900">{volunteer?.name || 'Voluntário Removido'}</p>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <Badge variant="secondary" className="text-[10px] bg-white border-slate-200">{schedule.groupId}</Badge>
-                                    <Badge variant="secondary" className="text-[10px] bg-white border-slate-200">{schedule.shift}</Badge>
+                                  <p className="font-black text-xl text-slate-900 tracking-tight">{volunteer?.name || 'Voluntário Removido'}</p>
+                                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                                    <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest bg-slate-50 text-slate-500 border-slate-100 px-3 py-1">{schedule.groupId}</Badge>
+                                    <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-widest bg-slate-50 text-slate-500 border-slate-100 px-3 py-1">{schedule.shift}</Badge>
                                     {schedule.studyTheme && (
-                                      <Badge variant="outline" className="text-[10px] border-primary/20 text-primary bg-primary/5">
+                                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-primary/20 text-primary bg-primary/5 px-3 py-1">
                                         {schedule.studyTheme}
                                       </Badge>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3 self-end md:self-center">
                                 <Button 
                                   size="icon" 
                                   variant="ghost" 
-                                  className="text-green-500 hover:bg-green-50 rounded-xl"
+                                  className="h-12 w-12 rounded-xl text-green-500 hover:bg-green-50 transition-all"
                                   onClick={() => sendScheduleWhatsApp(schedule)}
                                   title="Enviar para WhatsApp"
                                 >
-                                  <MessageCircle className="w-4 h-4" />
+                                  <MessageCircle className="w-6 h-6" />
                                 </Button>
                                 {schedule.studyIdeas && (
                                   <Dialog>
                                     <DialogTrigger render={
-                                      <Button size="icon" variant="ghost" className="text-primary hover:bg-primary/5 rounded-xl">
-                                        <Sparkles className="w-4 h-4" />
+                                      <Button size="icon" variant="ghost" className="h-12 w-12 rounded-xl text-primary hover:bg-primary/5 transition-all">
+                                        <Sparkles className="w-6 h-6" />
                                       </Button>
                                     } />
-                                    <DialogContent className="rounded-2xl max-w-lg">
-                                      <DialogHeader>
-                                        <DialogTitle className="flex items-center gap-2">
-                                          <Sparkles className="w-5 h-5 text-primary" />
-                                          Estudo: {schedule.studyTheme}
-                                        </DialogTitle>
-                                      </DialogHeader>
-                                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm text-slate-700 max-h-[60vh] overflow-y-auto shadow-sm prose prose-slate prose-sm">
+                                    <DialogContent className="rounded-[2.5rem] max-w-2xl border-none shadow-2xl p-0 overflow-hidden">
+                                      <div className="bg-primary p-10 text-white relative overflow-hidden">
+                                        <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
+                                        <DialogHeader>
+                                          <DialogTitle className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                                            <Sparkles className="w-8 h-8" />
+                                            Estudo: {schedule.studyTheme}
+                                          </DialogTitle>
+                                        </DialogHeader>
+                                      </div>
+                                      <div className="p-10 bg-slate-50/50 text-slate-700 max-h-[70vh] overflow-y-auto shadow-inner prose prose-slate prose-lg max-w-none">
                                         <ReactMarkdown>{schedule.studyIdeas}</ReactMarkdown>
                                       </div>
                                     </DialogContent>
@@ -3149,10 +3388,10 @@ export default function App() {
                                 <Button 
                                   size="icon" 
                                   variant="ghost" 
-                                  className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                  className="h-12 w-12 rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 transition-all"
                                   onClick={() => deleteSchedule(schedule.id!)}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-6 h-6" />
                                 </Button>
                               </div>
                             </div>
@@ -3166,46 +3405,49 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="coordination" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Materiais</h2>
+          <TabsContent value="coordination" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-50">
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight">Materiais & Estoque</h2>
+                <p className="text-slate-500 font-medium mt-1">Gerenciamento de recursos do ministério</p>
+              </div>
               <Dialog>
                 <DialogTrigger render={
-                  <Button className="rounded-xl">
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button className="h-14 rounded-2xl aljava-gradient px-8 shadow-xl shadow-primary/20 font-black uppercase tracking-widest text-xs">
+                    <Plus className="w-5 h-5 mr-3" />
                     Novo Material
                   </Button>
                 } />
                 <DialogContent className="max-w-md rounded-[2.5rem] max-h-[90vh] overflow-y-auto border-none shadow-2xl p-0 overflow-hidden">
-                  <div className="bg-primary p-8 text-white relative overflow-hidden">
+                  <div className="bg-primary p-10 text-white relative overflow-hidden">
                     <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
                     <DialogHeader>
-                      <DialogTitle className="text-2xl font-bold text-white">Novo Material</DialogTitle>
-                      <CardDescription className="text-white/70">Adicione um novo item ao estoque</CardDescription>
+                      <DialogTitle className="text-3xl font-black text-white tracking-tight">Novo Material</DialogTitle>
+                      <CardDescription className="text-white/70 font-medium">Adicione um novo item ao estoque</CardDescription>
                     </DialogHeader>
                   </div>
-                  <form onSubmit={addMaterial} className="p-8 space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="matName" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome do Material</Label>
-                      <Input id="matName" name="name" required placeholder="Ex: Lápis de cor" className="h-12 rounded-xl border-slate-200" />
+                  <form onSubmit={addMaterial} className="p-10 space-y-8">
+                    <div className="space-y-3">
+                      <Label htmlFor="matName" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Nome do Material</Label>
+                      <Input id="matName" name="name" required placeholder="Ex: Lápis de cor" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="matQty" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Quantidade Inicial</Label>
-                        <Input id="matQty" name="quantity" type="number" required defaultValue="0" className="h-12 rounded-xl border-slate-200" />
+                    <div className="grid grid-cols-2 gap-6">
+                      <div className="space-y-3">
+                        <Label htmlFor="matQty" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Qtd. Inicial</Label>
+                        <Input id="matQty" name="quantity" type="number" required defaultValue="0" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="matMin" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Qtd. Mínima</Label>
-                        <Input id="matMin" name="minQuantity" type="number" required defaultValue="5" className="h-12 rounded-xl border-slate-200" />
+                      <div className="space-y-3">
+                        <Label htmlFor="matMin" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Qtd. Mínima</Label>
+                        <Input id="matMin" name="minQuantity" type="number" required defaultValue="5" className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 focus:bg-white transition-all shadow-inner font-medium" />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="matCat" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Categoria</Label>
+                    <div className="space-y-3">
+                      <Label htmlFor="matCat" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Categoria</Label>
                       <Select name="category" defaultValue="Papelaria">
-                        <SelectTrigger className="h-12 rounded-xl border-slate-200">
+                        <SelectTrigger className="h-14 rounded-2xl border-slate-100 bg-slate-50/50 font-bold text-slate-600">
                           <SelectValue placeholder="Selecione" />
                         </SelectTrigger>
-                        <SelectContent className="rounded-xl">
+                        <SelectContent className="rounded-2xl border-none shadow-2xl">
                           <SelectItem value="Papelaria">Papelaria</SelectItem>
                           <SelectItem value="Brinquedos">Brinquedos</SelectItem>
                           <SelectItem value="Lanches">Lanches</SelectItem>
@@ -3214,52 +3456,60 @@ export default function App() {
                       </Select>
                     </div>
                     <DialogFooter className="pt-4">
-                      <Button type="submit" className="w-full h-14 text-lg rounded-2xl aljava-gradient shadow-lg shadow-primary/20">Cadastrar Material</Button>
+                      <Button type="submit" className="w-full h-16 text-lg rounded-2xl aljava-gradient shadow-xl shadow-primary/20 font-black uppercase tracking-widest">Cadastrar Material</Button>
                     </DialogFooter>
                   </form>
                 </DialogContent>
               </Dialog>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {materials.map(material => (
-                <Card key={material.id} className={`rounded-2xl border-slate-200 shadow-sm ${material.quantity <= material.minQuantity ? 'border-orange-200 bg-orange-50/30' : ''}`}>
-                  <CardHeader className="pb-2">
+                <Card key={material.id} className={`bento-card group overflow-hidden ${material.quantity <= material.minQuantity ? 'ring-2 ring-orange-200 bg-orange-50/30' : ''}`}>
+                  <CardHeader className="p-8 pb-4">
                     <div className="flex justify-between items-start">
-                      <Badge variant="outline">{material.category}</Badge>
+                      <Badge variant="secondary" className="rounded-full font-black uppercase tracking-widest text-[9px] px-3 py-1 bg-white border-slate-100 text-slate-500">{material.category}</Badge>
                       {material.quantity <= material.minQuantity && (
-                        <AlertCircle className="w-5 h-5 text-orange-500" />
+                        <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 animate-pulse">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
                       )}
                     </div>
-                    <CardTitle className="mt-2">{material.name}</CardTitle>
+                    <CardTitle className="mt-6 text-2xl font-black text-slate-900 tracking-tight">{material.name}</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-end justify-between mb-4">
+                  <CardContent className="p-8 pt-0">
+                    <div className="flex items-end justify-between mb-8">
                       <div>
-                        <div className="text-3xl font-bold">{material.quantity}</div>
-                        <div className="text-xs text-slate-500">unidades em estoque</div>
+                        <div className={`text-5xl font-black tracking-tighter ${material.quantity <= material.minQuantity ? 'text-orange-600' : 'text-primary'}`}>
+                          {material.quantity}
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-2">unidades em estoque</p>
                       </div>
-                      <div className="flex gap-1">
-                        <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg" onClick={() => updateMaterialQuantity(material, -1)}>
+                      <div className="flex gap-2">
+                        <Button size="icon" variant="outline" className="h-12 w-12 rounded-xl border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 font-black text-xl" onClick={() => updateMaterialQuantity(material, -1)}>
                           -
                         </Button>
-                        <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg" onClick={() => updateMaterialQuantity(material, 1)}>
+                        <Button size="icon" variant="outline" className="h-12 w-12 rounded-xl border-slate-200 hover:bg-primary hover:text-white hover:border-primary transition-all duration-300 font-black text-xl" onClick={() => updateMaterialQuantity(material, 1)}>
                           +
                         </Button>
-                        {isAdmin && (
-                          <>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-blue-500" onClick={() => handleEditMaterial(material)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-red-500" onClick={() => deleteMaterial(material.id!)}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
                       </div>
                     </div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">
-                      Última atualização: {format(new Date(material.lastUpdated), 'dd/MM HH:mm')}
+                    
+                    <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                        <Clock className="w-3 h-3" />
+                        {format(new Date(material.lastUpdated), 'dd/MM HH:mm')}
+                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-1">
+                          <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-blue-500 hover:bg-blue-50" onClick={() => handleEditMaterial(material)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-red-500 hover:bg-red-50" onClick={() => deleteMaterial(material.id!)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -3267,21 +3517,21 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="settings" className="space-y-8">
-            <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white overflow-hidden">
-              <div className="p-8 aljava-gradient text-white">
-                <h2 className="text-2xl font-bold flex items-center gap-2">
-                  <Settings className="w-6 h-6" />
-                  Configurações do Sistema
+          <TabsContent value="settings" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <Card className="bento-card overflow-hidden">
+              <div className="p-10 aljava-gradient text-white">
+                <h2 className="text-3xl font-black flex items-center gap-3 tracking-tight">
+                  <Settings className="w-8 h-8" />
+                  Configurações
                 </h2>
-                <p className="text-white/70 text-sm mt-1">Personalize a aparência e informações do seu ministério</p>
+                <p className="text-white/70 font-medium mt-2">Personalize a identidade do seu ministério</p>
               </div>
-              <CardContent className="p-8 space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <Label className="text-lg font-bold">Logo do Ministério</Label>
-                    <div className="flex flex-col items-center gap-6 p-8 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                      <div className="w-32 h-32 bg-white rounded-3xl shadow-lg flex items-center justify-center overflow-hidden border-4 border-white">
+              <CardContent className="p-10 space-y-12">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  <div className="space-y-6">
+                    <Label className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 ml-1">Identidade Visual</Label>
+                    <div className="flex flex-col items-center gap-8 p-10 bg-slate-50/50 rounded-[3rem] border-2 border-dashed border-slate-100 group hover:border-primary/20 transition-all">
+                      <div className="w-40 h-40 bg-white rounded-[2.5rem] shadow-2xl flex items-center justify-center overflow-hidden border-8 border-white group-hover:scale-105 transition-transform duration-500">
                         <img 
                           src={appSettings.logoUrl} 
                           alt="Preview Logo" 
@@ -3289,7 +3539,7 @@ export default function App() {
                           referrerPolicy="no-referrer"
                         />
                       </div>
-                      <div className="flex flex-col w-full gap-3">
+                      <div className="flex flex-col w-full gap-4">
                         <Input
                           type="file"
                           accept="image/*"
@@ -3303,45 +3553,45 @@ export default function App() {
                                 await setDoc(doc(db, 'settings', 'app'), { ...appSettings, logoUrl: url }, { merge: true });
                                 toast.success('Logo atualizada com sucesso!');
                               } catch (error) {
-                                console.error('Erro ao atualizar logo:', error);
+                                handleFirestoreError(error, OperationType.WRITE, 'settings/app');
                               }
                             }
                           }}
                         />
                         <Button 
                           asChild
-                          className="w-full h-12 rounded-2xl aljava-gradient font-bold shadow-lg shadow-primary/20"
+                          className="w-full h-14 rounded-2xl aljava-gradient font-black uppercase tracking-widest text-xs shadow-xl shadow-primary/20"
                         >
-                          <label htmlFor="logo-upload" className="cursor-pointer flex items-center justify-center gap-2">
+                          <label htmlFor="logo-upload" className="cursor-pointer flex items-center justify-center gap-3">
                             <Upload className="w-5 h-5" />
                             Alterar Logo
                           </label>
                         </Button>
-                        <p className="text-[10px] text-center text-slate-400 font-medium">Recomendado: PNG ou JPG, fundo transparente, 512x512px</p>
+                        <p className="text-[10px] text-center text-slate-400 font-black uppercase tracking-widest">PNG ou JPG • 512x512px</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <Label className="text-lg font-bold">Nome do Ministério</Label>
-                    <div className="space-y-4 p-8 bg-slate-50 rounded-[2rem] border border-slate-100">
-                      <div className="space-y-2">
-                        <Label htmlFor="app-name">Nome Exibido</Label>
+                  <div className="space-y-6">
+                    <Label className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 ml-1">Informações Gerais</Label>
+                    <div className="space-y-8 p-10 bg-slate-50/50 rounded-[3rem] border border-slate-100">
+                      <div className="space-y-3">
+                        <Label htmlFor="app-name" className="text-sm font-bold text-slate-700 ml-1">Nome do Ministério</Label>
                         <Input 
                           id="app-name"
                           value={appSettings.appName}
                           onChange={(e) => setAppSettings({ ...appSettings, appName: e.target.value })}
-                          className="h-12 rounded-xl border-slate-200"
+                          className="h-14 rounded-2xl border-none bg-white shadow-inner font-bold text-lg px-6"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="logo-url">URL da Logo</Label>
+                      <div className="space-y-3">
+                        <Label htmlFor="logo-url" className="text-sm font-bold text-slate-700 ml-1">URL da Logo</Label>
                         <Input 
                           id="logo-url"
                           value={appSettings.logoUrl}
                           onChange={(e) => setAppSettings({ ...appSettings, logoUrl: e.target.value })}
                           placeholder="https://exemplo.com/logo.png"
-                          className="h-12 rounded-xl border-slate-200"
+                          className="h-14 rounded-2xl border-none bg-white shadow-inner font-medium text-slate-500 px-6"
                         />
                       </div>
                       <Button 
@@ -3353,9 +3603,40 @@ export default function App() {
                             handleFirestoreError(error, OperationType.UPDATE, 'settings/app');
                           }
                         }}
-                        className="w-full h-12 rounded-xl bg-slate-900 text-white font-bold"
+                        className="w-full h-14 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all"
                       >
-                        Salvar Configurações
+                        Salvar Alterações
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-12 border-t border-slate-100">
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 ml-1">Manutenção de Dados</Label>
+                        <p className="text-sm text-slate-500 font-medium mt-1">Ferramentas para gestão da base de dados</p>
+                      </div>
+                      <Database className="w-6 h-6 text-slate-200" />
+                    </div>
+                    
+                    <div className="p-10 bg-amber-50/50 rounded-[3rem] border border-amber-100 flex flex-col md:flex-row items-center justify-between gap-8">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-amber-100 rounded-[1.5rem] flex items-center justify-center text-amber-600 shadow-inner">
+                          <Download className="w-8 h-8" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-black text-slate-900 tracking-tight">Importar Dados do Ministério</h4>
+                          <p className="text-slate-500 font-medium">Carregar a lista de flechas e responsáveis fornecida</p>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={handleImportSeedData}
+                        disabled={isImporting}
+                        className="w-full md:w-auto h-14 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-amber-500/20 px-10"
+                      >
+                        {isImporting ? 'Importando...' : 'Iniciar Importação'}
                       </Button>
                     </div>
                   </div>
