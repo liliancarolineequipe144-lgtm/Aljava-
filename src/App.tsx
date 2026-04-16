@@ -73,7 +73,8 @@ import {
   Share2,
   Settings,
   Database,
-  CheckCircle2
+  CheckCircle2,
+  MoreVertical
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -83,6 +84,14 @@ import html2canvas from 'html2canvas';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import ReactMarkdown from 'react-markdown';
+
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger, 
+  DropdownMenuSeparator 
+} from '@/components/ui/dropdown-menu';
 
 import { seedData } from './data/seedData';
 
@@ -153,7 +162,7 @@ export default function App() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const isAdmin = user && (
     user.isAnonymous ||
-    (user.email === 'convitebrancadeneve@gmail.com') ||
+    (user.email && user.email.toLowerCase() === 'convitebrancadeneve@gmail.com') ||
     (volunteers.find(v => v.phone === user.phoneNumber)?.role === 'Coordenador')
   );
 
@@ -182,21 +191,44 @@ export default function App() {
     setIsImporting(true);
     const t = toast.loading('Importando dados do ministério...');
     
+    const normalizePhone = (phone: string) => {
+      let cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('55') && cleaned.length >= 12) {
+        cleaned = cleaned.substring(2);
+      }
+      return cleaned;
+    };
+
     try {
+      // Map to keep track of created families by parent phone
+      const phoneToFamilyId: { [phone: string]: { familyId: string, parentIds: string[] } } = {};
+
       for (const item of seedData) {
-        // Create family ID
-        const familyId = `family_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Add parents
-        const parentIds: string[] = [];
-        for (const p of item.parents) {
-          const parentRef = doc(collection(db, 'parents'));
-          await setDoc(parentRef, {
-            ...p,
-            familyId,
-            id: parentRef.id
-          });
-          parentIds.push(parentRef.id);
+        const primaryPhone = item.parents[0]?.phone;
+        const normPrimaryPhone = primaryPhone ? normalizePhone(primaryPhone) : '';
+        let familyId = '';
+        let parentIds: string[] = [];
+
+        if (normPrimaryPhone && phoneToFamilyId[normPrimaryPhone]) {
+          familyId = phoneToFamilyId[normPrimaryPhone].familyId;
+          parentIds = phoneToFamilyId[normPrimaryPhone].parentIds;
+        } else {
+          // Create new family
+          familyId = `family_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          for (const p of item.parents) {
+            const parentRef = doc(collection(db, 'parents'));
+            await setDoc(parentRef, {
+              ...p,
+              familyId,
+              id: parentRef.id
+            });
+            parentIds.push(parentRef.id);
+          }
+
+          if (normPrimaryPhone) {
+            phoneToFamilyId[normPrimaryPhone] = { familyId, parentIds };
+          }
         }
         
         // Add child
@@ -265,17 +297,77 @@ export default function App() {
   const familyGroups = React.useMemo(() => {
     const groups: { [key: string]: { children: Child[], parents: Parent[], familyName?: string } } = {};
     
+    const normalizePhone = (phone: string) => {
+      let cleaned = phone.replace(/\D/g, '');
+      if (cleaned.startsWith('55') && cleaned.length >= 12) {
+        cleaned = cleaned.substring(2);
+      }
+      return cleaned;
+    };
+
     filteredChildren.forEach(child => {
-      const fId = child.familyId || child.parentId || 'orphan';
+      // Try to find a group by familyId first
+      let fId = child.familyId || child.parentId || 'orphan';
+      
+      // Get this child's parents
+      const childParents = parents.filter(p => (p.familyId && p.familyId === fId) || p.id === child.parentId);
+      
+      // Try to find an existing group that shares any parent phone (normalized) OR familyName
+      const sharedGroupKey = Object.keys(groups).find(key => {
+        const groupParents = groups[key].parents;
+        const groupName = groups[key].familyName;
+        
+        const hasSharedPhone = childParents.some(cp => {
+          const cpNorm = normalizePhone(cp.phone || '');
+          return cpNorm && groupParents.some(gp => normalizePhone(gp.phone || '') === cpNorm);
+        });
+
+        const hasSharedFamilyName = child.familyName && groupName && child.familyName.trim().toLowerCase() === groupName.trim().toLowerCase();
+        
+        // Also group if children share the same familyId
+        const hasSharedFamilyId = child.familyId && groups[key].children.some(c => c.familyId === child.familyId);
+
+        // Also group by parent name if phone is missing but name matches exactly
+        const hasSharedParentName = childParents.some(cp => {
+          return cp.name && groupParents.some(gp => gp.name === cp.name && !cp.phone && !gp.phone);
+        });
+
+        return hasSharedPhone || hasSharedFamilyName || hasSharedFamilyId || hasSharedParentName;
+      });
+      
+      if (sharedGroupKey) {
+        fId = sharedGroupKey;
+      }
+
       if (!groups[fId]) {
         groups[fId] = { children: [], parents: [], familyName: child.familyName };
-        const familyParents = parents.filter(p => (p.familyId && p.familyId === fId) || p.id === child.parentId);
-        groups[fId].parents = familyParents;
+        groups[fId].parents = childParents;
+      } else {
+        // Merge parents if not already in group (by normalized phone)
+        childParents.forEach(cp => {
+          const cpNorm = normalizePhone(cp.phone || '');
+          if (cpNorm && !groups[fId].parents.some(gp => normalizePhone(gp.phone || '') === cpNorm)) {
+            groups[fId].parents.push(cp);
+          }
+        });
       }
-      groups[fId].children.push(child);
+      
+      // Avoid duplicate children
+      if (!groups[fId].children.some(c => c.id === child.id)) {
+        groups[fId].children.push(child);
+      }
+      
+      // Update family name if missing
+      if (!groups[fId].familyName && child.familyName) {
+        groups[fId].familyName = child.familyName;
+      }
     });
     
-    return Object.values(groups).sort((a, b) => a.children[0].name.localeCompare(b.children[0].name));
+    return Object.values(groups).sort((a, b) => {
+      const nameA = a.children[0]?.name || '';
+      const nameB = b.children[0]?.name || '';
+      return nameA.localeCompare(nameB);
+    });
   }, [filteredChildren, parents]);
 
   // Auth
@@ -874,6 +966,41 @@ export default function App() {
     }
   }, [isAdmin, children, hasNotifiedToday]);
 
+  const normalizePhone = (phone: string) => {
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('55') && cleaned.length >= 12) {
+      cleaned = cleaned.substring(2);
+    }
+    return cleaned;
+  };
+
+  const syncParentToVolunteer = async (parent: { name: string; phone?: string; role?: string; id?: string }) => {
+    if (!parent.role) return;
+    
+    const normPhone = normalizePhone(parent.phone || '');
+    if (!normPhone) return;
+
+    const existingVolunteer = volunteers.find(v => normalizePhone(v.phone) === normPhone);
+    
+    const volunteerData = {
+      name: parent.name,
+      phone: parent.phone || '',
+      role: parent.role,
+      active: true,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    try {
+      if (existingVolunteer) {
+        await updateDoc(doc(db, 'volunteers', existingVolunteer.id!), volunteerData);
+      } else {
+        await addDoc(collection(db, 'volunteers'), volunteerData);
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar voluntário:', error);
+    }
+  };
+
   // Actions
   const addChild = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -882,23 +1009,54 @@ export default function App() {
       // 1. Create Family ID
       const familyId = `fam_${Date.now()}`;
 
-      // 2. Create Parents
+      // 2. Create or Reuse Parents
       const createdParents: Parent[] = [];
+      let existingFamilyId = '';
+
       for (const guardian of guardians) {
         if (!guardian.name || !guardian.phone) continue;
         
-        const parentData = {
-          name: guardian.name,
-          phone: guardian.phone,
-          leader: guardian.leader,
-          relation: guardian.relation,
-          familyId: familyId,
-          photoUrl: guardian.photoUrl || '',
-          role: guardian.role || ''
-        };
-        const parentRef = await addDoc(collection(db, 'parents'), parentData);
-        createdParents.push({ id: parentRef.id, ...parentData });
+        const normPhone = normalizePhone(guardian.phone);
+        // Check if parent already exists
+        const existingParent = parents.find(p => normalizePhone(p.phone || '') === normPhone);
+        
+        if (existingParent) {
+          const parentData = {
+            name: guardian.name,
+            phone: guardian.phone,
+            leader: guardian.leader,
+            relation: guardian.relation,
+            role: guardian.role || existingParent.role || '',
+            photoUrl: guardian.photoUrl || existingParent.photoUrl || ''
+          };
+          await updateDoc(doc(db, 'parents', existingParent.id!), parentData);
+          createdParents.push({ ...existingParent, ...parentData });
+          if (parentData.role) {
+            await syncParentToVolunteer({ id: existingParent.id, ...parentData });
+          }
+          if (existingParent.familyId) {
+            existingFamilyId = existingParent.familyId;
+          }
+        } else {
+          const parentData = {
+            name: guardian.name,
+            phone: guardian.phone,
+            leader: guardian.leader,
+            relation: guardian.relation,
+            familyId: familyId,
+            photoUrl: guardian.photoUrl || '',
+            role: guardian.role || ''
+          };
+          const parentRef = await addDoc(collection(db, 'parents'), parentData);
+          const newParent = { id: parentRef.id, ...parentData };
+          createdParents.push(newParent);
+          if (parentData.role) {
+            await syncParentToVolunteer(newParent);
+          }
+        }
       }
+
+      const finalFamilyId = existingFamilyId || familyId;
 
       if (createdParents.length === 0) {
         toast.error('Adicione pelo menos um responsável.');
@@ -926,8 +1084,8 @@ export default function App() {
           specialNeeds: childInfo.specialNeeds,
           parentId: createdParents[0].id,
           parentIds: createdParents.map(p => p.id!),
-          familyId: familyId,
-          familyName: familyName,
+          familyId: finalFamilyId,
+          familyName: familyName || (createdParents[0].name.split(' ').pop() || ''),
           status: childInfo.status as 'Ativa' | 'Inativa' | 'Visitante',
           photoUrl: childInfo.photoUrl || ''
         };
@@ -969,6 +1127,34 @@ export default function App() {
       toast.success(`${child.name} foi removido(a) do sistema.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'children');
+    }
+  };
+
+  const handleEditFamily = (group: any) => {
+    if (group.children[0]) {
+      handleEditChild(group.children[0]);
+    }
+  };
+
+  const handleDeleteFamily = async (group: any) => {
+    if (!window.confirm(`Tem certeza que deseja excluir toda a Família ${group.familyName || ''}? Isso excluirá todas as crianças e responsáveis vinculados.`)) return;
+    
+    try {
+      const t = toast.loading('Excluindo família...');
+      
+      // Delete children
+      for (const child of group.children) {
+        await deleteDoc(doc(db, 'children', child.id!));
+      }
+      
+      // Delete parents
+      for (const parent of group.parents) {
+        await deleteDoc(doc(db, 'parents', parent.id!));
+      }
+      
+      toast.success('Família excluída com sucesso!', { id: t });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'family');
     }
   };
 
@@ -1039,9 +1225,15 @@ export default function App() {
         if (guardian.id) {
           await updateDoc(doc(db, 'parents', guardian.id), parentData);
           updatedParentIds.push(guardian.id);
+          if (parentData.role) {
+            await syncParentToVolunteer({ id: guardian.id, ...parentData });
+          }
         } else {
           const parentRef = await addDoc(collection(db, 'parents'), parentData);
           updatedParentIds.push(parentRef.id);
+          if (parentData.role) {
+            await syncParentToVolunteer({ id: parentRef.id, ...parentData });
+          }
         }
       }
 
@@ -1518,22 +1710,29 @@ export default function App() {
           </div>
 
           <div className="p-6 border-t border-slate-50 bg-slate-50/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
-                  {user.displayName?.charAt(0) || 'A'}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                    {user.displayName?.charAt(0) || user.email?.charAt(0) || 'A'}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.displayName || user.email?.split('@')[0]}</span>
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                      <ShieldCheck className={`w-3 h-3 ${isAdmin ? 'text-green-500' : 'text-slate-300'}`} />
+                      {isAdmin ? 'Coordenador' : 'Visitante'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{user.displayName}</span>
-                  <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-green-500" />
-                    Coordenador
-                  </span>
-                </div>
+                <Button variant="ghost" size="icon" onClick={handleLogout} className="rounded-xl hover:bg-red-50 hover:text-red-500">
+                  <LogOut className="w-5 h-5" />
+                </Button>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout} className="rounded-xl hover:bg-red-50 hover:text-red-500">
-                <LogOut className="w-5 h-5" />
-              </Button>
+              {!isAdmin && user.email && (
+                <div className="text-[9px] text-slate-400 bg-slate-100 p-2 rounded-lg italic">
+                  Logado como: {user.email}
+                </div>
+              )}
             </div>
           </div>
         </aside>
@@ -1786,6 +1985,43 @@ export default function App() {
                   </motion.div>
                 );
               })}
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <Card 
+                  className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white cursor-pointer hover:scale-[1.02] hover:shadow-2xl transition-all duration-500 relative overflow-hidden group h-full"
+                  onClick={() => {
+                    const tabsTrigger = document.querySelector('[value="children"]') as HTMLElement;
+                    tabsTrigger?.click();
+                  }}
+                >
+                  <div className={`absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-slate-700 to-slate-900`} />
+                  <CardHeader className="p-8 relative z-10">
+                    <div className="flex justify-between items-start">
+                      <div className={`w-14 h-14 bg-slate-50 text-slate-900 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500`}>
+                        <Users className="w-7 h-7" />
+                      </div>
+                    </div>
+                    <div className="mt-6">
+                      <CardTitle className="text-sm font-black uppercase tracking-[0.15em] text-slate-400">Total de Famílias</CardTitle>
+                      <div className="text-5xl font-black mt-2 text-slate-900 tracking-tighter">
+                        {familyGroups.length}
+                      </div>
+                    </div>
+                    <div className="mt-6 flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ver Todas</span>
+                      </div>
+                      <div className={`w-10 h-10 bg-slate-50 text-slate-900 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-x-4 group-hover:translate-x-0`}>
+                        <ArrowRight className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                </Card>
+              </motion.div>
             </div>
 
             <Dialog open={!!selectedGroup} onOpenChange={(open) => !open && setSelectedGroup(null)}>
@@ -1828,9 +2064,21 @@ export default function App() {
                               {c.status === 'Inativa' && ' (Inativa)'}
                             </span>
                           </div>
-                          <Badge variant="outline" className="text-[10px]">
-                            {c.birthDate.split('-').reverse().join('/')} {getAgeGroup(c.birthDate).age > 0 && `• ${getAgeGroup(c.birthDate).age} ${getAgeGroup(c.birthDate).age === 1 ? 'ano' : 'anos'}`}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px]">
+                              {c.birthDate.split('-').reverse().join('/')} {getAgeGroup(c.birthDate).age > 0 && `• ${getAgeGroup(c.birthDate).age} ${getAgeGroup(c.birthDate).age === 1 ? 'ano' : 'anos'}`}
+                            </Badge>
+                            {isAdmin && (
+                              <div className="flex gap-1">
+                                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-blue-500 hover:bg-blue-50" onClick={() => { setSelectedGroup(null); handleEditChild(c); }}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg text-red-500 hover:bg-red-50" onClick={() => handleDeleteChild(c)}>
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     {children.filter(c => getAgeGroup(c.birthDate).id === selectedGroup?.id).length === 0 && (
@@ -2443,6 +2691,7 @@ export default function App() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
               {familyGroups.map((group, groupIdx) => {
+                if (group.children.length === 0) return null;
                 const familyId = group.children[0].familyId || group.children[0].parentId || `group-${groupIdx}`;
                 return (
                   <motion.div layout key={familyId} className="space-y-4">
@@ -2463,6 +2712,53 @@ export default function App() {
                               </CardDescription>
                             </div>
                           </div>
+                          {isAdmin && (
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="rounded-xl border-slate-100 hover:bg-primary hover:text-white transition-all font-bold h-10"
+                                onClick={() => {
+                                  setFamilyName(group.familyName || '');
+                                  setGuardians(group.parents.map(p => ({
+                                    name: p.name,
+                                    phone: p.phone,
+                                    relation: p.relation,
+                                    leader: p.leader,
+                                    photoUrl: p.photoUrl,
+                                    role: p.role
+                                  })));
+                                  setChildrenToAdd([{ name: '', birthDate: '', allergies: '', specialNeeds: '', status: 'Ativa', photoUrl: '' }]);
+                                  setIsChildDialogOpen(true);
+                                }}
+                              >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Adicionar Irmão
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger className="h-10 w-10 rounded-xl border border-slate-100 flex items-center justify-center hover:bg-slate-50 transition-colors outline-none">
+                                  <MoreVertical className="w-5 h-5 text-slate-400" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-2xl p-2 min-w-[160px] bg-white shadow-2xl border border-slate-100">
+                                  <DropdownMenuItem 
+                                    className="rounded-xl font-bold text-slate-600 focus:bg-slate-50 cursor-pointer"
+                                    onClick={() => handleEditFamily(group)}
+                                  >
+                                    <Pencil className="w-4 h-4 mr-3 text-blue-500" />
+                                    Editar Família
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator className="my-2" />
+                                  <DropdownMenuItem 
+                                    className="rounded-xl font-bold text-red-600 focus:bg-red-50 cursor-pointer"
+                                    onClick={() => handleDeleteFamily(group)}
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-3" />
+                                    Excluir Família
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent className="p-8 pt-0 space-y-10">
@@ -2503,20 +2799,20 @@ export default function App() {
                                     </div>
                                   </div>
                                   {isAdmin && (
-                                    <div className="flex gap-2 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                    <div className="flex gap-2">
                                       <Button 
                                         size="icon" 
                                         variant="ghost" 
-                                        className={`h-10 w-10 rounded-xl ${child.status === 'Inativa' ? 'text-green-500 hover:bg-green-50' : 'text-amber-500 hover:bg-amber-50'}`} 
+                                        className={`h-10 w-10 rounded-xl border border-slate-100/50 ${child.status === 'Inativa' ? 'text-green-500 hover:bg-green-50' : 'text-amber-500 hover:bg-amber-50'}`} 
                                         onClick={() => toggleChildStatus(child)}
                                         title={child.status === 'Inativa' ? "Ativar" : "Desativar"}
                                       >
                                         {child.status === 'Inativa' ? <UserPlus className="w-5 h-5" /> : <UserMinus className="w-5 h-5" />}
                                       </Button>
-                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-blue-500 hover:bg-blue-50" onClick={() => handleEditChild(child)}>
+                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl border border-slate-100/50 text-blue-500 hover:bg-blue-50" onClick={() => handleEditChild(child)}>
                                         <Pencil className="w-5 h-5" />
                                       </Button>
-                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl text-red-500 hover:bg-red-50" onClick={() => handleDeleteChild(child)}>
+                                      <Button size="icon" variant="ghost" className="h-10 w-10 rounded-xl border border-slate-100/50 text-red-500 hover:bg-red-50" onClick={() => handleDeleteChild(child)}>
                                         <Trash2 className="w-5 h-5" />
                                       </Button>
                                     </div>
@@ -3785,23 +4081,41 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Dados das Flechas (Crianças)</h3>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        className="rounded-xl border-primary/20 text-primary hover:bg-primary/5"
-                        onClick={() => setChildrenToAdd([...childrenToAdd, { name: '', birthDate: '', allergies: '', specialNeeds: '', status: 'Ativa', photoUrl: '' }])}
-                      >
+                  <div className="flex items-center justify-between mb-4 bg-primary/5 p-4 rounded-2xl border border-primary/10">
+                    <div>
+                      <h3 className="text-sm font-black uppercase tracking-widest text-primary">Dados das Flechas (Crianças)</h3>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Você pode adicionar várias crianças de uma vez</p>
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="default" 
+                      size="sm" 
+                      className="rounded-xl aljava-gradient shadow-lg shadow-primary/20"
+                      onClick={() => setChildrenToAdd([...childrenToAdd, { name: '', birthDate: '', allergies: '', specialNeeds: '', status: 'Ativa', photoUrl: '' }])}
+                    >
                       <Plus className="w-4 h-4 mr-2" />
-                      Adicionar Criança
+                      Adicionar Outra Criança
                     </Button>
                   </div>
 
                   <div className="space-y-6">
                     {childrenToAdd.map((child, index) => (
                       <div key={index} className="p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 relative group">
+                        {childrenToAdd.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-4 right-4 h-8 w-8 rounded-full text-red-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => {
+                              const newChildren = [...childrenToAdd];
+                              newChildren.splice(index, 1);
+                              setChildrenToAdd(newChildren);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                         <div className="flex flex-col md:flex-row gap-6 mb-6">
                           <div className="flex flex-col items-center gap-2">
                             <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center relative group/photo">
@@ -3931,6 +4245,21 @@ export default function App() {
                     <div className="space-y-8">
                       {guardians.map((guardian, index) => (
                         <div key={index} className="p-6 bg-slate-50/50 rounded-[2rem] border border-slate-100 relative group">
+                          {guardians.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute top-4 right-4 h-8 w-8 rounded-full text-red-400 hover:text-red-600 hover:bg-red-50"
+                              onClick={() => {
+                                const newGuardians = [...guardians];
+                                newGuardians.splice(index, 1);
+                                setGuardians(newGuardians);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                           <div className="flex flex-col md:flex-row gap-6 mb-6">
                             <div className="flex flex-col items-center gap-2">
                               <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center relative group/photo">
