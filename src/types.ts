@@ -23,6 +23,7 @@ export interface Parent {
   relation: string;
   familyId?: string;
   photoUrl?: string;
+  role?: string;
 }
 
 export interface Material {

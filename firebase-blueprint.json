@@ -27,7 +27,8 @@
         "phone": { "type": "string", "description": "Contact phone number" },
         "leader": { "type": "string", "description": "Leader responsible for this parent" },
         "relation": { "type": "string", "description": "Relation to the child (Father, Mother, etc.)" },
-        "familyId": { "type": "string", "description": "Family grouping ID" }
+        "familyId": { "type": "string", "description": "Family grouping ID" },
+        "role": { "type": "string", "description": "Role or position in the network/church" }
       },
       "required": ["name", "phone", "leader"]
     },

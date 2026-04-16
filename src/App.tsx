@@ -141,9 +141,9 @@ export default function App() {
   const [showSuccessView, setShowSuccessView] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [lastRegisteredData, setLastRegisteredData] = useState<{children: any[], parents: any[]} | null>(null);
-  const [guardians, setGuardians] = useState([{ name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }]);
+  const [guardians, setGuardians] = useState([{ name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '', role: '' }]);
   const [childrenToAdd, setChildrenToAdd] = useState([{ name: '', birthDate: '', allergies: '', specialNeeds: '', status: 'Ativa', photoUrl: '' }]);
-  const [editGuardians, setEditGuardians] = useState([{ id: '', name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }]);
+  const [editGuardians, setEditGuardians] = useState([{ id: '', name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '', role: '' }]);
   const [familyName, setFamilyName] = useState('');
   const [hasNotifiedToday, setHasNotifiedToday] = useState(false);
   const [appSettings, setAppSettings] = useState<{ logoUrl: string, appName: string }>({
@@ -151,7 +151,11 @@ export default function App() {
     appName: 'Aljava Controle'
   });
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const isAdmin = !!user;
+  const isAdmin = user && (
+    user.isAnonymous ||
+    (user.email === 'convitebrancadeneve@gmail.com') ||
+    (volunteers.find(v => v.phone === user.phoneNumber)?.role === 'Coordenador')
+  );
 
   // Service AI States
   const [serviceAiPrompt, setServiceAiPrompt] = useState('');
@@ -215,6 +219,7 @@ export default function App() {
     } catch (error) {
       console.error('Erro na importação:', error);
       toast.error('Erro ao importar dados.', { id: t });
+      handleFirestoreError(error, OperationType.CREATE, 'seed_import');
     } finally {
       setIsImporting(false);
     }
@@ -888,7 +893,8 @@ export default function App() {
           leader: guardian.leader,
           relation: guardian.relation,
           familyId: familyId,
-          photoUrl: guardian.photoUrl || ''
+          photoUrl: guardian.photoUrl || '',
+          role: guardian.role || ''
         };
         const parentRef = await addDoc(collection(db, 'parents'), parentData);
         createdParents.push({ id: parentRef.id, ...parentData });
@@ -939,7 +945,7 @@ export default function App() {
         parents: createdParents
       });
       setShowSuccessView(true);
-      setGuardians([{ name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }]);
+      setGuardians([{ name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '', role: '' }]);
       setChildrenToAdd([{ name: '', birthDate: '', allergies: '', specialNeeds: '', status: 'Ativa', photoUrl: '' }]);
       setFamilyName('');
       (e.target as HTMLFormElement).reset();
@@ -951,7 +957,7 @@ export default function App() {
       } else {
         toast.error('Erro ao cadastrar família: ' + errorMessage);
       }
-      handleFirestoreError(err, OperationType.CREATE, 'children/parents');
+      handleFirestoreError(err, OperationType.CREATE, 'children_parents');
     }
   };
 
@@ -989,7 +995,8 @@ export default function App() {
       phone: p.phone,
       leader: p.leader,
       relation: p.relation,
-      photoUrl: p.photoUrl || ''
+      photoUrl: p.photoUrl || '',
+      role: p.role || ''
     })));
     setIsEditDialogOpen(true);
   };
@@ -1025,7 +1032,8 @@ export default function App() {
           leader: guardian.leader,
           relation: guardian.relation,
           familyId: familyId,
-          photoUrl: guardian.photoUrl || ''
+          photoUrl: guardian.photoUrl || '',
+          role: guardian.role || ''
         };
 
         if (guardian.id) {
@@ -1066,7 +1074,7 @@ export default function App() {
       setIsEditDialogOpen(false);
       setEditingChild(null);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'children/parents');
+      handleFirestoreError(err, OperationType.UPDATE, 'children_parents');
     }
   };
 
@@ -2297,7 +2305,7 @@ export default function App() {
                                     </Button>
                                   )}
                                   <Dialog>
-                                    <DialogTrigger asChild>
+                                    <DialogTrigger render={
                                       <Button 
                                         size="sm" 
                                         variant="outline" 
@@ -2307,7 +2315,7 @@ export default function App() {
                                         <QrCode className="w-3 h-3 mr-2" />
                                         Cartão
                                       </Button>
-                                    </DialogTrigger>
+                                    } />
                                     <DialogContent className="max-w-sm rounded-[2.5rem] p-0 max-h-[90vh] overflow-y-auto border-none shadow-2xl scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                                     <div id={`entry-card-${child.id}`} className="bg-white">
                                       <div className="aljava-gradient p-8 text-white text-center">
@@ -2346,11 +2354,11 @@ export default function App() {
                                           <Share2 className="w-4 h-4" />
                                           Compartilhar
                                         </Button>
-                                        <DialogClose asChild>
+                                        <DialogClose render={
                                           <Button variant="ghost" className="flex-1 h-12 rounded-xl text-slate-400 font-bold">
                                             Fechar
                                           </Button>
-                                        </DialogClose>
+                                        } />
                                       </div>
                                     </div>
                                   </DialogContent>
@@ -2537,7 +2545,14 @@ export default function App() {
                                       </div>
                                     )}
                                     <div>
-                                      <p className="font-black text-slate-900 text-base leading-tight">{parent.name}</p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="font-black text-slate-900 text-base leading-tight">{parent.name}</p>
+                                        {parent.role && (
+                                          <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg uppercase tracking-wider border border-slate-200">
+                                            {parent.role}
+                                          </span>
+                                        )}
+                                      </div>
                                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{parent.relation} • Líder: {parent.leader || '---'}</p>
                                     </div>
                                   </div>
@@ -3559,14 +3574,14 @@ export default function App() {
                           }}
                         />
                         <Button 
-                          asChild
+                          render={
+                            <label htmlFor="logo-upload" className="cursor-pointer flex items-center justify-center gap-3">
+                              <Upload className="w-5 h-5" />
+                              Alterar Logo
+                            </label>
+                          }
                           className="w-full h-14 rounded-2xl aljava-gradient font-black uppercase tracking-widest text-xs shadow-xl shadow-primary/20"
-                        >
-                          <label htmlFor="logo-upload" className="cursor-pointer flex items-center justify-center gap-3">
-                            <Upload className="w-5 h-5" />
-                            Alterar Logo
-                          </label>
-                        </Button>
+                        />
                         <p className="text-[10px] text-center text-slate-400 font-black uppercase tracking-widest">PNG ou JPG • 512x512px</p>
                       </div>
                     </div>
@@ -3611,36 +3626,38 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-12 border-t border-slate-100">
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 ml-1">Manutenção de Dados</Label>
-                        <p className="text-sm text-slate-500 font-medium mt-1">Ferramentas para gestão da base de dados</p>
-                      </div>
-                      <Database className="w-6 h-6 text-slate-200" />
-                    </div>
-                    
-                    <div className="p-10 bg-amber-50/50 rounded-[3rem] border border-amber-100 flex flex-col md:flex-row items-center justify-between gap-8">
-                      <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-amber-100 rounded-[1.5rem] flex items-center justify-center text-amber-600 shadow-inner">
-                          <Download className="w-8 h-8" />
-                        </div>
+                {isAdmin && (
+                  <div className="pt-12 border-t border-slate-100">
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
                         <div>
-                          <h4 className="text-xl font-black text-slate-900 tracking-tight">Importar Dados do Ministério</h4>
-                          <p className="text-slate-500 font-medium">Carregar a lista de flechas e responsáveis fornecida</p>
+                          <Label className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 ml-1">Manutenção de Dados</Label>
+                          <p className="text-sm text-slate-500 font-medium mt-1">Ferramentas para gestão da base de dados</p>
                         </div>
+                        <Database className="w-6 h-6 text-slate-200" />
                       </div>
-                      <Button 
-                        onClick={handleImportSeedData}
-                        disabled={isImporting}
-                        className="w-full md:w-auto h-14 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-amber-500/20 px-10"
-                      >
-                        {isImporting ? 'Importando...' : 'Iniciar Importação'}
-                      </Button>
+                      
+                      <div className="p-10 bg-amber-50/50 rounded-[3rem] border border-amber-100 flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div className="flex items-center gap-6">
+                          <div className="w-16 h-16 bg-amber-100 rounded-[1.5rem] flex items-center justify-center text-amber-600 shadow-inner">
+                            <Download className="w-8 h-8" />
+                          </div>
+                          <div>
+                            <h4 className="text-xl font-black text-slate-900 tracking-tight">Importar Dados do Ministério</h4>
+                            <p className="text-slate-500 font-medium">Carregar a lista de flechas e responsáveis fornecida</p>
+                          </div>
+                        </div>
+                        <Button 
+                          onClick={handleImportSeedData}
+                          disabled={isImporting}
+                          className="w-full md:w-auto h-14 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-xs shadow-xl shadow-amber-500/20 px-10"
+                        >
+                          {isImporting ? 'Importando...' : 'Iniciar Importação'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -3698,7 +3715,9 @@ export default function App() {
                     <Label className="text-xs text-slate-400 uppercase">Responsáveis</Label>
                     <div className="space-y-1">
                       {lastRegisteredData.parents.map((p: any, idx: number) => (
-                        <p key={idx} className="font-semibold text-slate-900">{p.name} ({p.relation})</p>
+                        <p key={idx} className="font-semibold text-slate-900">
+                          {p.name} ({p.relation}) {p.role && <span className="text-[10px] text-primary">[{p.role}]</span>}
+                        </p>
                       ))}
                     </div>
                   </div>
@@ -3902,7 +3921,7 @@ export default function App() {
                         variant="outline" 
                         size="sm" 
                         className="rounded-xl border-primary/20 text-primary hover:bg-primary/5"
-                        onClick={() => setGuardians([...guardians, { name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }])}
+                        onClick={() => setGuardians([...guardians, { name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '', role: '' }])}
                       >
                         <Plus className="w-4 h-4 mr-2" />
                         Adicionar Responsável
@@ -3982,6 +4001,19 @@ export default function App() {
                                   setGuardians(newGuardians);
                                 }}
                                 placeholder="Nome do líder" 
+                                className="h-12 rounded-xl border-slate-200 bg-white focus:ring-primary" 
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Cargo (Rede Aljava)</Label>
+                              <Input 
+                                value={guardian.role}
+                                onChange={(e) => {
+                                  const newGuardians = [...guardians];
+                                  newGuardians[index].role = e.target.value;
+                                  setGuardians(newGuardians);
+                                }}
+                                placeholder="Ex: Diácono, Obreiro, etc." 
                                 className="h-12 rounded-xl border-slate-200 bg-white focus:ring-primary" 
                               />
                             </div>
@@ -4225,7 +4257,7 @@ export default function App() {
                     variant="outline" 
                     size="sm" 
                     className="h-8 rounded-xl border-primary/20 text-primary hover:bg-primary/5"
-                    onClick={() => setEditGuardians([...editGuardians, { id: '', name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '' }])}
+                    onClick={() => setEditGuardians([...editGuardians, { id: '', name: '', phone: '', leader: '', relation: 'Pai/Mãe', photoUrl: '', role: '' }])}
                   >
                     <Plus className="w-3 h-3 mr-1" /> Adicionar
                   </Button>
@@ -4292,28 +4324,15 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Nome</Label>
+                          <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Cargo (Rede Aljava)</Label>
                           <Input 
-                            value={guardian.name}
+                            value={guardian.role}
                             onChange={(e) => {
                               const newGuardians = [...editGuardians];
-                              newGuardians[index].name = e.target.value;
+                              newGuardians[index].role = e.target.value;
                               setEditGuardians(newGuardians);
                             }}
-                            required 
-                            className="h-10 rounded-lg border-slate-200"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Telefone</Label>
-                          <Input 
-                            value={guardian.phone}
-                            onChange={(e) => {
-                              const newGuardians = [...editGuardians];
-                              newGuardians[index].phone = e.target.value;
-                              setEditGuardians(newGuardians);
-                            }}
-                            required 
+                            placeholder="Ex: Diácono"
                             className="h-10 rounded-lg border-slate-200"
                           />
                         </div>

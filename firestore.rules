@@ -48,16 +48,22 @@ service cloud.firestore {
              (!('parentIds' in data) || data.parentIds is list) &&
              (!('familyId' in data) || isValidString(data.familyId, 1, 100)) &&
              (!('familyName' in data) || isValidString(data.familyName, 0, 200)) &&
-             (!('photoUrl' in data) || isValidString(data.photoUrl, 0, 2000));
+             (!('photoUrl' in data) || isValidString(data.photoUrl, 0, 2000)) &&
+             (!('allergies' in data) || data.allergies is string) &&
+             (!('specialNeeds' in data) || data.specialNeeds is string) &&
+             (!('checkedIn' in data) || data.checkedIn is bool) &&
+             (!('createdAt' in data) || data.createdAt is string);
     }
 
     function isValidParent(data) {
       return data.keys().hasAll(['name', 'phone', 'leader']) &&
              isValidString(data.name, 1, 200) &&
              isValidString(data.phone, 5, 30) &&
-             isValidString(data.leader, 1, 200) &&
+             isValidString(data.leader, 0, 200) &&
              (!('familyId' in data) || isValidString(data.familyId, 1, 100)) &&
-             (!('relation' in data) || isValidString(data.relation, 1, 50));
+             (!('relation' in data) || isValidString(data.relation, 1, 50)) &&
+             (!('photoUrl' in data) || isValidString(data.photoUrl, 0, 2000)) &&
+             (!('role' in data) || isValidString(data.role, 0, 100));
     }
 
     function isValidMaterial(data) {
