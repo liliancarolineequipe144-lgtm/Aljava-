@@ -74,7 +74,9 @@ import {
   Settings,
   Database,
   CheckCircle2,
-  MoreVertical
+  MoreVertical,
+  HeartPulse,
+  Activity
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -1177,10 +1179,10 @@ export default function App() {
     const familyParents = parents.filter(p => (p.familyId && p.familyId === familyId) || p.id === child.parentId);
     setEditGuardians(familyParents.map(p => ({
       id: p.id || '',
-      name: p.name,
-      phone: p.phone,
-      leader: p.leader,
-      relation: p.relation,
+      name: p.name || '',
+      phone: p.phone || '',
+      leader: p.leader || '',
+      relation: p.relation || 'Pai/Mãe',
       photoUrl: p.photoUrl || '',
       role: p.role || ''
     })));
@@ -1910,28 +1912,97 @@ export default function App() {
 
           <TabsContent value="dashboard" className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {isAdmin && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bento-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-slate-50"
-              >
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-primary/5 rounded-[1.5rem] flex items-center justify-center text-primary shadow-inner">
-                    <UserPlus className="w-8 h-8" />
+              <div className="space-y-10">
+                {/* Cadastro Rápido Shortcut */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bento-card p-8 flex flex-col md:flex-row items-center justify-between gap-6 border border-slate-50"
+                >
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-primary/5 rounded-[1.5rem] flex items-center justify-center text-primary shadow-inner">
+                      <Plus className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tight">Cadastro Rápido</h3>
+                      <p className="text-slate-500 font-medium">Adicione uma nova flecha ao ministério agora mesmo</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Cadastro Rápido</h3>
-                    <p className="text-slate-500 font-medium">Adicione uma nova flecha ao ministério agora mesmo</p>
+                  <Button 
+                    onClick={() => setIsChildDialogOpen(true)} 
+                    className="w-full md:w-auto h-16 rounded-2xl aljava-gradient px-10 shadow-xl shadow-primary/20 text-lg font-black hover:scale-[1.02] transition-transform"
+                  >
+                    <UserPlus className="w-6 h-6 mr-2" />
+                    Cadastrar Nova Criança
+                  </Button>
+                </motion.div>
+
+                {/* Quadro de Saúde do Ministério */}
+                <div className="space-y-8">
+                  <div className="flex items-center gap-3 ml-2">
+                    <div className="w-2 h-8 bg-red-500 rounded-full" />
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+                      <HeartPulse className="w-6 h-6 text-red-500 animate-pulse" />
+                      Quadro de Saúde do Ministério
+                    </h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {(() => {
+                      const totalChildren = children.length;
+                      const activeChildren = children.filter(c => c.status !== 'Inativa').length;
+                      const retentionRate = totalChildren > 0 ? (activeChildren / totalChildren) * 100 : 100;
+
+                      const totalMaterials = materials.length;
+                      const healthyMaterials = materials.filter(m => m.quantity > (m.minQuantity || 0)).length;
+                      const stockHealth = totalMaterials > 0 ? (healthyMaterials / totalMaterials) * 100 : 100;
+
+                      const weekBirthdays = children.filter(c => {
+                        const parts = c.birthDate.split('-');
+                        if (parts.length !== 3) return false;
+                        const now = new Date();
+                        const birth = new Date(now.getFullYear(), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        const diff = (birth.getTime() - now.setHours(0,0,0,0)) / (1000 * 3600 * 24);
+                        return diff >= 0 && diff <= 7;
+                      }).length;
+
+                      const stats = [
+                        { label: 'Retenção', value: retentionRate.toFixed(0) + '%', sub: `${activeChildren} Flechas Ativas`, icon: Activity, color: retentionRate > 80 ? 'text-emerald-500' : retentionRate > 60 ? 'text-amber-500' : 'text-red-500', bg: retentionRate > 80 ? 'bg-emerald-50' : retentionRate > 60 ? 'bg-amber-50' : 'bg-red-50' },
+                        { label: 'Liderança', value: volunteers.length, sub: `${volunteers.length} Voluntários`, icon: Users, color: 'text-indigo-500', bg: 'bg-indigo-50' },
+                        { label: 'Estoque', value: stockHealth.toFixed(0) + '%', sub: `${totalMaterials - healthyMaterials} Itens Críticos`, icon: Package, color: stockHealth > 80 ? 'text-primary' : 'text-red-500', bg: stockHealth > 80 ? 'bg-blue-50' : 'bg-red-50' },
+                        { label: 'Comunhão', value: weekBirthdays, sub: 'Festa esta Semana', icon: Cake, color: 'text-pink-500', bg: 'bg-pink-50' },
+                      ];
+
+                      return stats.map((stat, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: i * 0.1 }}
+                          className="bento-card p-8 bg-white border border-slate-50 relative overflow-hidden group shadow-lg shadow-slate-200/40"
+                        >
+                          <div className={`absolute top-0 right-0 w-24 h-24 ${stat.bg} rotate-12 -mr-8 -mt-8 opacity-20 transition-transform duration-700 group-hover:scale-150 group-hover:rotate-45`} />
+                          <div className="relative z-10 space-y-4">
+                            <div className={`w-14 h-14 ${stat.bg} ${stat.color} rounded-2xl flex items-center justify-center shadow-inner`}>
+                              <stat.icon className="w-8 h-8" />
+                            </div>
+                            <div>
+                              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{stat.label}</p>
+                              <div className="flex items-baseline gap-2 mt-1">
+                                <span className="text-4xl font-black text-slate-900 tracking-tighter">{stat.value}</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${stat.color} animate-pulse`} />
+                                {stat.sub}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ));
+                    })()}
                   </div>
                 </div>
-                <Button 
-                  onClick={() => setIsChildDialogOpen(true)} 
-                  className="w-full md:w-auto h-16 rounded-2xl aljava-gradient px-10 shadow-xl shadow-primary/20 text-lg font-black hover:scale-[1.02] transition-transform"
-                >
-                  <Plus className="w-6 h-6 mr-2" />
-                  Cadastrar Nova Criança
-                </Button>
-              </motion.div>
+              </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -4148,7 +4219,7 @@ export default function App() {
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome da Criança {childrenToAdd.length > 1 ? index + 1 : ''}</Label>
                               <Input 
-                                value={child.name}
+                                value={child.name || ''}
                                 onChange={(e) => {
                                   const newChildren = [...childrenToAdd];
                                   newChildren[index].name = e.target.value;
@@ -4162,7 +4233,7 @@ export default function App() {
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Data de Nascimento (DD/MM/AAAA)</Label>
                               <Input 
-                                value={child.birthDate}
+                                value={child.birthDate || ''}
                                 onChange={(e) => {
                                   const newChildren = [...childrenToAdd];
                                   newChildren[index].birthDate = e.target.value;
@@ -4179,7 +4250,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Alergias</Label>
                             <Input 
-                              value={child.allergies}
+                              value={child.allergies || ''}
                               onChange={(e) => {
                                 const newChildren = [...childrenToAdd];
                                 newChildren[index].allergies = e.target.value;
@@ -4192,7 +4263,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Observações Especiais</Label>
                             <Input 
-                              value={child.specialNeeds}
+                              value={child.specialNeeds || ''}
                               onChange={(e) => {
                                 const newChildren = [...childrenToAdd];
                                 newChildren[index].specialNeeds = e.target.value;
@@ -4205,7 +4276,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Status</Label>
                             <Select 
-                              value={child.status}
+                              value={child.status || 'Ativa'}
                               onValueChange={(val) => {
                                 const newChildren = [...childrenToAdd];
                                 newChildren[index].status = val as any;
@@ -4292,7 +4363,7 @@ export default function App() {
                               <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome do Responsável {guardians.length > 1 ? index + 1 : ''}</Label>
                                 <Input 
-                                  value={guardian.name}
+                                  value={guardian.name || ''}
                                   onChange={(e) => {
                                     const newGuardians = [...guardians];
                                     newGuardians[index].name = e.target.value;
@@ -4306,7 +4377,7 @@ export default function App() {
                               <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">WhatsApp</Label>
                                 <Input 
-                                  value={guardian.phone}
+                                  value={guardian.phone || ''}
                                   onChange={(e) => {
                                     const newGuardians = [...guardians];
                                     newGuardians[index].phone = e.target.value;
@@ -4323,7 +4394,7 @@ export default function App() {
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Líder do Responsável</Label>
                               <Input 
-                                value={guardian.leader}
+                                value={guardian.leader || ''}
                                 onChange={(e) => {
                                   const newGuardians = [...guardians];
                                   newGuardians[index].leader = e.target.value;
@@ -4336,7 +4407,7 @@ export default function App() {
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Cargo (Rede Aljava)</Label>
                               <Input 
-                                value={guardian.role}
+                                value={guardian.role || ''}
                                 onChange={(e) => {
                                   const newGuardians = [...guardians];
                                   newGuardians[index].role = e.target.value;
@@ -4349,7 +4420,7 @@ export default function App() {
                             <div className="space-y-2">
                               <Label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Parentesco</Label>
                               <Select 
-                                value={guardian.relation}
+                                value={guardian.relation || 'Pai/Mãe'}
                                 onValueChange={(val) => {
                                   const newGuardians = [...guardians];
                                   newGuardians[index].relation = val;
@@ -4402,19 +4473,19 @@ export default function App() {
               <form onSubmit={updateVolunteer} className="p-8 space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="edit-volName" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome Completo</Label>
-                  <Input id="edit-volName" name="name" defaultValue={editingVolunteer.name} required className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-volName" name="name" defaultValue={editingVolunteer.name || ''} required className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-volPhone" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">WhatsApp</Label>
-                  <Input id="edit-volPhone" name="phone" defaultValue={editingVolunteer.phone} required className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-volPhone" name="phone" defaultValue={editingVolunteer.phone || ''} required className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-volBirth" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nascimento</Label>
-                  <Input id="edit-volBirth" name="birthDate" defaultValue={editingVolunteer.birthDate} className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-volBirth" name="birthDate" defaultValue={editingVolunteer.birthDate || ''} className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-volRole" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Função</Label>
-                  <Select name="role" defaultValue={editingVolunteer.role}>
+                  <Select name="role" defaultValue={editingVolunteer.role || ''}>
                     <SelectTrigger className="h-12 rounded-xl border-slate-200">
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
@@ -4450,21 +4521,21 @@ export default function App() {
             <form onSubmit={updateMaterial} className="p-8 space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="edit-matName" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome do Material</Label>
-                <Input id="edit-matName" name="name" defaultValue={editingMaterial.name} required className="h-12 rounded-xl border-slate-200" />
+                <Input id="edit-matName" name="name" defaultValue={editingMaterial.name || ''} required className="h-12 rounded-xl border-slate-200" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-matQty" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Quantidade</Label>
-                  <Input id="edit-matQty" name="quantity" type="number" defaultValue={editingMaterial.quantity} required className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-matQty" name="quantity" type="number" defaultValue={editingMaterial.quantity || 0} required className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-matMin" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Qtd. Mínima</Label>
-                  <Input id="edit-matMin" name="minQuantity" type="number" defaultValue={editingMaterial.minQuantity} required className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-matMin" name="minQuantity" type="number" defaultValue={editingMaterial.minQuantity || 0} required className="h-12 rounded-xl border-slate-200" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-matCat" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Categoria</Label>
-                <Select name="category" defaultValue={editingMaterial.category}>
+                <Select name="category" defaultValue={editingMaterial.category || ''}>
                   <SelectTrigger className="h-12 rounded-xl border-slate-200">
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
@@ -4540,25 +4611,25 @@ export default function App() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-name" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nome da Criança</Label>
-                  <Input id="edit-name" name="name" defaultValue={editingChild.name} required className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-name" name="name" defaultValue={editingChild.name || ''} required className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-birthDate" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Nascimento (DD/MM/AAAA)</Label>
                   <Input 
                     id="edit-birthDate" 
                     name="birthDate" 
-                    defaultValue={editingChild.birthDate} 
+                    defaultValue={editingChild.birthDate || ''} 
                     required 
                     className="h-12 rounded-xl border-slate-200"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-allergies" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Alergias</Label>
-                  <Input id="edit-allergies" name="allergies" defaultValue={editingChild.allergies} className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-allergies" name="allergies" defaultValue={editingChild.allergies || ''} className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-specialNeeds" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Observações Especiais</Label>
-                  <Input id="edit-specialNeeds" name="specialNeeds" defaultValue={editingChild.specialNeeds} className="h-12 rounded-xl border-slate-200" />
+                  <Input id="edit-specialNeeds" name="specialNeeds" defaultValue={editingChild.specialNeeds || ''} className="h-12 rounded-xl border-slate-200" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-status" className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Status</Label>
@@ -4626,7 +4697,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Nome</Label>
                             <Input 
-                              value={guardian.name}
+                              value={guardian.name || ''}
                               onChange={(e) => {
                                 const newGuardians = [...editGuardians];
                                 newGuardians[index].name = e.target.value;
@@ -4639,7 +4710,7 @@ export default function App() {
                           <div className="space-y-2">
                             <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Telefone</Label>
                             <Input 
-                              value={guardian.phone}
+                              value={guardian.phone || ''}
                               onChange={(e) => {
                                 const newGuardians = [...editGuardians];
                                 newGuardians[index].phone = e.target.value;
@@ -4655,7 +4726,7 @@ export default function App() {
                         <div className="space-y-2">
                           <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Cargo (Rede Aljava)</Label>
                           <Input 
-                            value={guardian.role}
+                            value={guardian.role || ''}
                             onChange={(e) => {
                               const newGuardians = [...editGuardians];
                               newGuardians[index].role = e.target.value;
@@ -4668,7 +4739,7 @@ export default function App() {
                         <div className="space-y-2">
                           <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Líder</Label>
                           <Input 
-                            value={guardian.leader}
+                            value={guardian.leader || ''}
                             onChange={(e) => {
                               const newGuardians = [...editGuardians];
                               newGuardians[index].leader = e.target.value;
@@ -4680,7 +4751,7 @@ export default function App() {
                         <div className="space-y-2">
                           <Label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Parentesco</Label>
                           <Select 
-                            value={guardian.relation}
+                            value={guardian.relation || 'Pai/Mãe'}
                             onValueChange={(val) => {
                               const newGuardians = [...editGuardians];
                               newGuardians[index].relation = val;
